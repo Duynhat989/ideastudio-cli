@@ -1,0 +1,37 @@
+/* Shared flow-node loading spin + gen timer strip (imported from main.js) */
+
+.node-gen-spin {
+  display: inline-block;
+  flex-shrink: 0;
+  animation: node-gen-spin-kf 0.88s linear infinite;
+}
+
+@keyframes node-gen-spin-kf {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.gen-timer-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  padding: 0.4rem 0.55rem;
+  margin-bottom: 0.45rem;
+  border-radius: 8px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  font-variant-numeric: tabular-nums;
+  background: rgba(234, 179, 8, 0.08);
+  border: 1px solid rgba(234, 179, 8, 0.22);
+  color: #eab308;
+}
+
+.gen-timer-banner .gen-timer-label {
+  color: #fde68a;
+}

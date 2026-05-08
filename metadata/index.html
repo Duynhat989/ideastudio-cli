@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IdeaStudio - Restricted Access</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg-1: #080a10;
+      --bg-2: #121826;
+      --danger: #ff5f57;
+      --warning: #ffb547;
+      --text: #f1f5ff;
+      --muted: #9ea7bc;
+      --card: rgba(11, 16, 28, 0.86);
+      --line: rgba(255, 130, 130, 0.35);
+    }
+    body {
+      min-height: 100vh;
+      font-family: "Segoe UI", Roboto, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 15% 20%, rgba(255, 95, 87, 0.15), transparent 45%),
+        radial-gradient(circle at 85% 80%, rgba(255, 181, 71, 0.1), transparent 45%),
+        linear-gradient(135deg, var(--bg-1), var(--bg-2));
+      display: grid;
+      place-items: center;
+      padding: 20px;
+    }
+    .panel {
+      width: min(780px, 100%);
+      border: 1px solid var(--line);
+      background: var(--card);
+      border-radius: 18px;
+      box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
+      padding: 28px 26px;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(255, 95, 87, 0.18);
+      border: 1px solid rgba(255, 95, 87, 0.45);
+      color: #ffd5d2;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+    .badge-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--danger);
+      box-shadow: 0 0 12px rgba(255, 95, 87, 0.85);
+    }
+    h1 {
+      margin-top: 14px;
+      font-size: clamp(26px, 4vw, 38px);
+      line-height: 1.2;
+      color: #fff6f6;
+    }
+    .lead {
+      margin-top: 12px;
+      color: #ffdddd;
+      font-size: 16px;
+      line-height: 1.65;
+      font-weight: 600;
+    }
+    .desc {
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.7;
+    }
+    .list {
+      margin-top: 18px;
+      display: grid;
+      gap: 10px;
+    }
+    .item {
+      border: 1px dashed rgba(255, 181, 71, 0.35);
+      background: rgba(255, 181, 71, 0.08);
+      border-radius: 12px;
+      padding: 10px 12px;
+      color: #ffe8be;
+      font-size: 13px;
+    }
+    .footer {
+      margin-top: 18px;
+      padding-top: 14px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      color: #8f9ab3;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <main class="panel">
+    <div class="badge"><span class="badge-dot"></span> RESTRICTED ENDPOINT</div>
+    <h1>Direct access to this endpoint is not allowed</h1>
+    <p class="lead">This is an internal IdeaStudio endpoint. Browser access is blocked.</p>
+    <p class="desc">
+      This service is only used for internal backend communication between the desktop app
+      and protected services. If you can see this page, please return to the IdeaStudio app.
+    </p>
+
+    <section class="list">
+      <div class="item">Do not enter account credentials or API keys on this page.</div>
+      <div class="item">Do not share this URL with third parties.</div>
+      <div class="item">All valid actions must be performed inside the IdeaStudio application.</div>
+    </section>
+
+    <div class="footer">IdeaStudio Internal Service • Unauthorized direct access is not allowed.</div>
+  </main>
+</body>
+</html>

@@ -1,0 +1,5 @@
+2026/05/08-17:54:16.884 9468 Creating DB E:\IdeaStudio\metadata\profiles\profile_843a0947-4335-4804-8edc-3e8979394d95\Default\Local Storage\leveldb since it was missing.
+2026/05/08-17:54:16.912 9468 Reusing MANIFEST E:\IdeaStudio\metadata\profiles\profile_843a0947-4335-4804-8edc-3e8979394d95\Default\Local Storage\leveldb/MANIFEST-000001
+2026/05/08-17:54:32.628 5cbc Level-0 table #5: started
+2026/05/08-17:54:32.634 5cbc Level-0 table #5: 62988 bytes OK
+2026/05/08-17:54:32.636 5cbc Delete type=0 #3

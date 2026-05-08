@@ -1,0 +1,429 @@
+{
+  "id": "c25f9f16-72e7-4f53-85b0-74b621e06798",
+  "name": "View Camp",
+  "description": "View Camp",
+  "aspectPreset": "portrait",
+  "imageAspectRatio": "IMAGE_ASPECT_RATIO_PORTRAIT",
+  "videoAspectRatio": "VIDEO_ASPECT_RATIO_PORTRAIT",
+  "nodes": [
+    {
+      "id": "start-molkucng-wwuiqr20",
+      "type": "start",
+      "position": {
+        "x": 318.3849789220842,
+        "y": 236.77370946790495
+      },
+      "data": {
+        "status": "idle",
+        "inputs": []
+      }
+    },
+    {
+      "id": "imageInput-molkucng-yuq5j3c1",
+      "type": "imageInput",
+      "position": {
+        "x": 296.57259918844113,
+        "y": 590.0098639379034
+      },
+      "data": {
+        "inputs": [],
+        "status": "idle",
+        "image": "http://localhost:27123/resources/c25f9f16-72e7-4f53-85b0-74b621e06798/assets/node-asset-1777559205137-012089456045456d.jpg",
+        "name": "Ảnh sản phẩm túi xách"
+      }
+    },
+    {
+      "id": "imageInput-molkucng-v04etht9",
+      "type": "imageInput",
+      "position": {
+        "x": 295.592227875807,
+        "y": 1029.794609249923
+      },
+      "data": {
+        "inputs": [],
+        "status": "idle",
+        "image": "http://localhost:27123/resources/c25f9f16-72e7-4f53-85b0-74b621e06798/assets/node-asset-1777559202720-aacc0f2c14f32be9.png",
+        "name": "Ảnh người mẫu tham chiếu"
+      }
+    },
+    {
+      "id": "imageGen-molkucng-56m7e857",
+      "type": "imageGen",
+      "position": {
+        "x": 1308.3906449220287,
+        "y": -566.028695154553
+      },
+      "data": {
+        "inputs": [
+          "http://localhost:27123/resources/c25f9f16-72e7-4f53-85b0-74b621e06798/assets/node-asset-1777559205137-012089456045456d.jpg",
+          "http://localhost:27123/resources/c25f9f16-72e7-4f53-85b0-74b621e06798/assets/node-asset-1777559202720-aacc0f2c14f32be9.png"
+        ],
+        "result": "http://localhost:27123/resources/c25f9f16-72e7-4f53-85b0-74b621e06798/assets/node-asset-1777559261660-cc86d9589c896bf6.jpg",
+        "status": "idle",
+        "prompt": "A high-end taupe leather handbag with a grainy texture and a prominent gold circular metal clasp, placed on a minimalist pedestal in a professional photography studio, soft cinematic lighting highlighting the leather grain and metallic shine, neutral gray background.",
+        "imageModel": "GEM_PIX_2"
+      }
+    },
+    {
+      "id": "imageGen-molkucng-m22osssn",
+      "type": "imageGen",
+      "position": {
+        "x": 881.8993934368278,
+        "y": 110.90459181371023
+      },
+      "data": {
+        "inputs": [
+          "http://localhost:27123/resources/c25f9f16-72e7-4f53-85b0-74b621e06798/assets/node-asset-1777559205137-012089456045456d.jpg",
+          "http://localhost:27123/resources/c25f9f16-72e7-4f53-85b0-74b621e06798/assets/node-asset-1777559202720-aacc0f2c14f32be9.png"
+        ],
+        "result": "http://localhost:27123/resources/c25f9f16-72e7-4f53-85b0-74b621e06798/assets/node-asset-1777559303476-c171c8b3c9ab7c7f.jpg",
+        "status": "idle",
+        "prompt": "An adult woman (age 25) with glasses wearing a professional black blazer, holding the taupe leather handbag with a gold clasp, posing elegantly in a minimalist studio with soft professional lighting, sophisticated and chic aesthetic.",
+        "imageModel": "GEM_PIX_2"
+      }
+    },
+    {
+      "id": "imageGen-molkucng-hh11tmtd",
+      "type": "imageGen",
+      "position": {
+        "x": 884.9901943744236,
+        "y": 782.3616816261908
+      },
+      "data": {
+        "inputs": [
+          "http://localhost:27123/resources/c25f9f16-72e7-4f53-85b0-74b621e06798/assets/node-asset-1777559205137-012089456045456d.jpg",
+          "http://localhost:27123/resources/c25f9f16-72e7-4f53-85b0-74b621e06798/assets/node-asset-1777559202720-aacc0f2c14f32be9.png"
+        ],
+        "result": "http://localhost:27123/resources/c25f9f16-72e7-4f53-85b0-74b621e06798/assets/node-asset-1777559261490-82041057b2622783.jpg",
+        "status": "idle",
+        "prompt": "A full-body shot of an adult woman (age 25) wearing a black blazer and glasses, walking confidently on a modern high-end city sidewalk with glass buildings in the background, carrying the taupe leather handbag, soft natural sunlight, fashion photography style.",
+        "imageModel": "GEM_PIX_2"
+      }
+    },
+    {
+      "id": "imageGen-molkucng-vqdin674",
+      "type": "imageGen",
+      "position": {
+        "x": 1242.3390415616357,
+        "y": 1415.4106823117127
+      },
+      "data": {
+        "inputs": [
+          "http://localhost:27123/resources/c25f9f16-72e7-4f53-85b0-74b621e06798/assets/node-asset-1777559205137-012089456045456d.jpg",
+          "http://localhost:27123/resources/c25f9f16-72e7-4f53-85b0-74b621e06798/assets/node-asset-1777559202720-aacc0f2c14f32be9.png"
+        ],
+        "result": "http://localhost:27123/resources/c25f9f16-72e7-4f53-85b0-74b621e06798/assets/node-asset-1777559264559-8309efd16bfc6862.jpg",
+        "status": "idle",
+        "prompt": "Ảnh người mẫu mặc blazer đen, đeo túi xách da màu taupe, đang sải bước tự tin trên vỉa hè đường phố hiện đại với các tòa nhà kính, ánh sáng ban ngày tự nhiên, toàn thân, phong cách thời trang cao cấp.",
+        "imageModel": "GEM_PIX_2"
+      }
+    },
+    {
+      "id": "videoGen-molkucng-odwpi2cn",
+      "type": "videoGen",
+      "position": {
+        "x": 1810.4395080602526,
+        "y": 33.07789275130628
+      },
+      "data": {
+        "inputs": [
+          "http://localhost:27123/resources/c25f9f16-72e7-4f53-85b0-74b621e06798/assets/node-asset-1777559261660-cc86d9589c896bf6.jpg",
+          "http://localhost:27123/resources/c25f9f16-72e7-4f53-85b0-74b621e06798/assets/node-asset-1777559303476-c171c8b3c9ab7c7f.jpg"
+        ],
+        "result": "http://localhost:27123/resources/c25f9f16-72e7-4f53-85b0-74b621e06798/assets/node-asset-1777559406427-857243e483bc6ffb.mp4",
+        "status": "idle",
+        "prompt": "A smooth close-up camera pan moving slowly across the taupe leather handbag, focusing on the intricate stitching and the gleaming gold circular clasp. Subtle light reflections dance across the leather surface in a professional studio setting, creating a luxurious and elegant atmosphere.",
+        "videoModel": "VEO_3_FAST",
+        "type": "frame",
+        "clipDurationSec": 8,
+        "segmentLabel": "Clip 1/3 · 00:00-00:08"
+      }
+    },
+    {
+      "id": "videoGen-molkucng-a3dar7s6",
+      "type": "videoGen",
+      "position": {
+        "x": 1443.3596286873656,
+        "y": 543.3934369996927
+      },
+      "data": {
+        "inputs": [
+          "http://localhost:27123/resources/c25f9f16-72e7-4f53-85b0-74b621e06798/assets/node-asset-1777559303476-c171c8b3c9ab7c7f.jpg",
+          "http://localhost:27123/resources/c25f9f16-72e7-4f53-85b0-74b621e06798/assets/node-asset-1777559261490-82041057b2622783.jpg"
+        ],
+        "result": "http://localhost:27123/resources/c25f9f16-72e7-4f53-85b0-74b621e06798/assets/node-asset-1777559787356-994eae2b82eaf870.mp4",
+        "status": "idle",
+        "prompt": "The adult woman (age 25) in the black blazer stands in the studio, slowly shifting her pose while holding the taupe handbag. She gently adjusts her glasses and looks confidently toward the camera. The camera performs a subtle zoom-in, capturing her professional demeanor and the handbag's premium quality.",
+        "videoModel": "VEO_3_FAST",
+        "type": "frame",
+        "clipDurationSec": 8,
+        "segmentLabel": "Clip 2/3 · 00:08-00:16"
+      }
+    },
+    {
+      "id": "videoGen-molkucng-l23nmyo7",
+      "type": "videoGen",
+      "position": {
+        "x": 1853.8216756225029,
+        "y": 1083.7427895604062
+      },
+      "data": {
+        "inputs": [
+          "http://localhost:27123/resources/c25f9f16-72e7-4f53-85b0-74b621e06798/assets/node-asset-1777559261490-82041057b2622783.jpg",
+          "http://localhost:27123/resources/c25f9f16-72e7-4f53-85b0-74b621e06798/assets/node-asset-1777559264559-8309efd16bfc6862.jpg"
+        ],
+        "result": "http://localhost:27123/resources/c25f9f16-72e7-4f53-85b0-74b621e06798/assets/node-asset-1777559362578-79c600287d40f98c.mp4",
+        "status": "idle",
+        "prompt": "A full shot of the adult woman (age 25) walking gracefully down a modern urban street. Her black blazer and the taupe handbag move naturally with her rhythmic stride. The camera tracks her movement from the side, showing the handbag swaying gently against the backdrop of a contemporary city with soft sunlight.",
+        "videoModel": "VEO_3_FAST",
+        "type": "frame",
+        "clipDurationSec": 8,
+        "segmentLabel": "Clip 3/3 · 00:16-00:24"
+      }
+    },
+    {
+      "id": "videoPreview-molkucng-a3o1at6h",
+      "type": "videoPreview",
+      "position": {
+        "x": 2291.797684613782,
+        "y": 532.6582610122423
+      },
+      "data": {
+        "inputs": [
+          "http://localhost:27123/resources/c25f9f16-72e7-4f53-85b0-74b621e06798/assets/node-asset-1777559406427-857243e483bc6ffb.mp4",
+          "http://localhost:27123/resources/c25f9f16-72e7-4f53-85b0-74b621e06798/assets/node-asset-1777559787356-994eae2b82eaf870.mp4",
+          "http://localhost:27123/resources/c25f9f16-72e7-4f53-85b0-74b621e06798/assets/node-asset-1777559362578-79c600287d40f98c.mp4"
+        ],
+        "result": "http://localhost:27123/resources/c25f9f16-72e7-4f53-85b0-74b621e06798/assets/node-asset-1777559406427-857243e483bc6ffb.mp4",
+        "status": "idle",
+        "outputs": [
+          "http://localhost:27123/resources/c25f9f16-72e7-4f53-85b0-74b621e06798/assets/node-asset-1777559406427-857243e483bc6ffb.mp4",
+          "http://localhost:27123/resources/c25f9f16-72e7-4f53-85b0-74b621e06798/assets/node-asset-1777559787356-994eae2b82eaf870.mp4",
+          "http://localhost:27123/resources/c25f9f16-72e7-4f53-85b0-74b621e06798/assets/node-asset-1777559362578-79c600287d40f98c.mp4"
+        ]
+      }
+    },
+    {
+      "id": "source-molkw8p6-lte8idi5",
+      "type": "source",
+      "position": {
+        "x": 2718.8907711042457,
+        "y": 718.3033029257488
+      },
+      "data": {
+        "inputs": [
+          "http://localhost:27123/resources/c25f9f16-72e7-4f53-85b0-74b621e06798/assets/node-asset-1777559406427-857243e483bc6ffb.mp4",
+          "http://localhost:27123/resources/c25f9f16-72e7-4f53-85b0-74b621e06798/assets/node-asset-1777559787356-994eae2b82eaf870.mp4",
+          "http://localhost:27123/resources/c25f9f16-72e7-4f53-85b0-74b621e06798/assets/node-asset-1777559362578-79c600287d40f98c.mp4"
+        ],
+        "status": "idle"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-ai-1777559184268-0-ieu5r2",
+      "source": "start-molkucng-wwuiqr20",
+      "target": "imageInput-molkucng-yuq5j3c1"
+    },
+    {
+      "id": "edge-ai-1777559184268-1-xxgoos",
+      "source": "start-molkucng-wwuiqr20",
+      "target": "imageInput-molkucng-v04etht9"
+    },
+    {
+      "id": "edge-ai-1777559184268-2-v39dzp",
+      "source": "start-molkucng-wwuiqr20",
+      "target": "imageGen-molkucng-56m7e857"
+    },
+    {
+      "id": "edge-ai-1777559184268-3-rh5v2o",
+      "source": "imageInput-molkucng-yuq5j3c1",
+      "target": "imageGen-molkucng-56m7e857"
+    },
+    {
+      "id": "edge-ai-1777559184268-4-k4sjyp",
+      "source": "imageInput-molkucng-v04etht9",
+      "target": "imageGen-molkucng-56m7e857"
+    },
+    {
+      "id": "edge-ai-1777559184268-5-5e5mhi",
+      "source": "imageGen-molkucng-56m7e857",
+      "target": "videoGen-molkucng-odwpi2cn",
+      "targetHandle": "in-start"
+    },
+    {
+      "id": "edge-ai-1777559184268-6-kv5vn7",
+      "source": "imageGen-molkucng-m22osssn",
+      "target": "videoGen-molkucng-odwpi2cn",
+      "targetHandle": "in-end"
+    },
+    {
+      "id": "edge-ai-1777559184268-7-8ja6ob",
+      "source": "videoGen-molkucng-odwpi2cn",
+      "target": "videoPreview-molkucng-a3o1at6h"
+    },
+    {
+      "id": "edge-ai-1777559184268-8-mt13by",
+      "source": "start-molkucng-wwuiqr20",
+      "target": "imageGen-molkucng-m22osssn"
+    },
+    {
+      "id": "edge-ai-1777559184268-9-3l2jkl",
+      "source": "imageInput-molkucng-yuq5j3c1",
+      "target": "imageGen-molkucng-m22osssn"
+    },
+    {
+      "id": "edge-ai-1777559184268-10-77xdnd",
+      "source": "imageInput-molkucng-v04etht9",
+      "target": "imageGen-molkucng-m22osssn"
+    },
+    {
+      "id": "edge-ai-1777559184268-11-nypzrk",
+      "source": "imageGen-molkucng-m22osssn",
+      "target": "videoGen-molkucng-a3dar7s6",
+      "targetHandle": "in-start"
+    },
+    {
+      "id": "edge-ai-1777559184268-12-78edys",
+      "source": "imageGen-molkucng-hh11tmtd",
+      "target": "videoGen-molkucng-a3dar7s6",
+      "targetHandle": "in-end"
+    },
+    {
+      "id": "edge-ai-1777559184268-13-lzscdr",
+      "source": "videoGen-molkucng-a3dar7s6",
+      "target": "videoPreview-molkucng-a3o1at6h"
+    },
+    {
+      "id": "edge-ai-1777559184268-14-iy3n2u",
+      "source": "start-molkucng-wwuiqr20",
+      "target": "imageGen-molkucng-hh11tmtd"
+    },
+    {
+      "id": "edge-ai-1777559184268-15-uzvl2c",
+      "source": "imageInput-molkucng-yuq5j3c1",
+      "target": "imageGen-molkucng-hh11tmtd"
+    },
+    {
+      "id": "edge-ai-1777559184268-16-eizox3",
+      "source": "imageInput-molkucng-v04etht9",
+      "target": "imageGen-molkucng-hh11tmtd"
+    },
+    {
+      "id": "edge-ai-1777559184268-17-c9g5v2",
+      "source": "imageGen-molkucng-hh11tmtd",
+      "target": "videoGen-molkucng-l23nmyo7",
+      "targetHandle": "in-start"
+    },
+    {
+      "id": "edge-ai-1777559184268-18-1163rw",
+      "source": "imageGen-molkucng-vqdin674",
+      "target": "videoGen-molkucng-l23nmyo7",
+      "targetHandle": "in-end"
+    },
+    {
+      "id": "edge-ai-1777559184268-19-evm1d4",
+      "source": "videoGen-molkucng-l23nmyo7",
+      "target": "videoPreview-molkucng-a3o1at6h"
+    },
+    {
+      "id": "edge-ai-1777559184268-20-4203pe",
+      "source": "start-molkucng-wwuiqr20",
+      "target": "imageGen-molkucng-vqdin674"
+    },
+    {
+      "id": "edge-ai-1777559184268-21-3mqezd",
+      "source": "imageInput-molkucng-yuq5j3c1",
+      "target": "imageGen-molkucng-vqdin674"
+    },
+    {
+      "id": "edge-ai-1777559184268-22-6vfe43",
+      "source": "imageInput-molkucng-v04etht9",
+      "target": "imageGen-molkucng-vqdin674"
+    },
+    {
+      "id": "vueflow__edge-videoPreview-molkucng-a3o1at6hout-source-molkw8p6-lte8idi5in",
+      "source": "videoPreview-molkucng-a3o1at6h",
+      "target": "source-molkw8p6-lte8idi5",
+      "sourceHandle": "out",
+      "targetHandle": "in"
+    }
+  ],
+  "createdAt": "2026-04-30T14:22:39.094Z",
+  "updatedAt": "2026-05-08T11:14:09.431Z",
+  "assets": [
+    {
+      "fileName": "node-asset-1777559202720-aacc0f2c14f32be9.png",
+      "kind": "image",
+      "nodeId": "imageInput-molkucng-v04etht9",
+      "mimeType": "image/png",
+      "url": "/resources/c25f9f16-72e7-4f53-85b0-74b621e06798/assets/node-asset-1777559202720-aacc0f2c14f32be9.png",
+      "createdAt": "2026-04-30T14:26:42.732Z"
+    },
+    {
+      "fileName": "node-asset-1777559205137-012089456045456d.jpg",
+      "kind": "image",
+      "nodeId": "imageInput-molkucng-yuq5j3c1",
+      "mimeType": "image/jpeg",
+      "url": "/resources/c25f9f16-72e7-4f53-85b0-74b621e06798/assets/node-asset-1777559205137-012089456045456d.jpg",
+      "createdAt": "2026-04-30T14:26:45.138Z"
+    },
+    {
+      "fileName": "node-asset-1777559261490-82041057b2622783.jpg",
+      "kind": "image",
+      "nodeId": "imageGen-molkucng-hh11tmtd",
+      "mimeType": "image/jpeg",
+      "url": "/resources/c25f9f16-72e7-4f53-85b0-74b621e06798/assets/node-asset-1777559261490-82041057b2622783.jpg",
+      "createdAt": "2026-04-30T14:27:41.492Z"
+    },
+    {
+      "fileName": "node-asset-1777559261660-cc86d9589c896bf6.jpg",
+      "kind": "image",
+      "nodeId": "imageGen-molkucng-56m7e857",
+      "mimeType": "image/jpeg",
+      "url": "/resources/c25f9f16-72e7-4f53-85b0-74b621e06798/assets/node-asset-1777559261660-cc86d9589c896bf6.jpg",
+      "createdAt": "2026-04-30T14:27:41.667Z"
+    },
+    {
+      "fileName": "node-asset-1777559264559-8309efd16bfc6862.jpg",
+      "kind": "image",
+      "nodeId": "imageGen-molkucng-vqdin674",
+      "mimeType": "image/jpeg",
+      "url": "/resources/c25f9f16-72e7-4f53-85b0-74b621e06798/assets/node-asset-1777559264559-8309efd16bfc6862.jpg",
+      "createdAt": "2026-04-30T14:27:44.566Z"
+    },
+    {
+      "fileName": "node-asset-1777559303476-c171c8b3c9ab7c7f.jpg",
+      "kind": "image",
+      "nodeId": "imageGen-molkucng-m22osssn",
+      "mimeType": "image/jpeg",
+      "url": "/resources/c25f9f16-72e7-4f53-85b0-74b621e06798/assets/node-asset-1777559303476-c171c8b3c9ab7c7f.jpg",
+      "createdAt": "2026-04-30T14:28:23.484Z"
+    },
+    {
+      "fileName": "node-asset-1777559362578-79c600287d40f98c.mp4",
+      "kind": "video",
+      "nodeId": "videoGen-molkucng-l23nmyo7",
+      "mimeType": "video/mp4",
+      "url": "/resources/c25f9f16-72e7-4f53-85b0-74b621e06798/assets/node-asset-1777559362578-79c600287d40f98c.mp4",
+      "createdAt": "2026-04-30T14:29:22.623Z"
+    },
+    {
+      "fileName": "node-asset-1777559406427-857243e483bc6ffb.mp4",
+      "kind": "video",
+      "nodeId": "videoGen-molkucng-odwpi2cn",
+      "mimeType": "video/mp4",
+      "url": "/resources/c25f9f16-72e7-4f53-85b0-74b621e06798/assets/node-asset-1777559406427-857243e483bc6ffb.mp4",
+      "createdAt": "2026-04-30T14:30:06.447Z"
+    },
+    {
+      "fileName": "node-asset-1777559787356-994eae2b82eaf870.mp4",
+      "kind": "video",
+      "nodeId": "videoGen-molkucng-a3dar7s6",
+      "mimeType": "video/mp4",
+      "url": "/resources/c25f9f16-72e7-4f53-85b0-74b621e06798/assets/node-asset-1777559787356-994eae2b82eaf870.mp4",
+      "createdAt": "2026-04-30T14:36:27.373Z"
+    }
+  ]
+}

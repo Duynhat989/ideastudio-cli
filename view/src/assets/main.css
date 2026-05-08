@@ -1,0 +1,62 @@
+:root {
+	--color-bg: #09090b;
+	--color-bg-elevated: #13151a;
+	--color-bg-soft: #1b1e24;
+	--color-border: #2b313b;
+	--color-text-on-accent: #0a0a0a;
+	--color-text: #f3f4f6;
+	--color-text-muted: #9ca3af;
+	--color-accent: #facc15;
+	--color-accent-strong: #eab308;
+	--color-accent-soft: rgba(250, 204, 21, 0.15);
+	--color-accent-glow-strong: rgba(250, 204, 21, 0.6);
+	--color-accent-bg-fade-1: rgba(250, 204, 21, 0.17);
+	--color-accent-bg-fade-2: rgba(250, 204, 21, 0.1);
+	--color-danger: #ef4444;
+	--card-bg: #13151a;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+	width: 100%;
+	min-height: 100%;
+	margin: 0;
+	padding: 0;
+}
+
+body {
+	font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+	background:
+		radial-gradient(circle at 8% -5%, var(--color-accent-bg-fade-1), transparent 35%),
+		radial-gradient(circle at 95% 15%, var(--color-accent-bg-fade-2), transparent 28%),
+		var(--color-bg);
+	color: var(--color-text);
+}
+
+
+
+.vue-flow__controls-button {
+  background: transparent !important;
+  border: none !important;
+  color: #71717a !important;
+  transition: all 0.2s !important;
+}
+
+
+.vue-flow__handle {
+  width: 20px !important;
+  height: 20px !important;
+  background-color: var(--accent-color) !important;
+  border: 10px solid #eb8f0f !important;
+}
+.vue-flow__handle-right{
+	z-index: 999 !important;
+}
+.vue-flow__handle-left{
+	z-index: 999 !important;
+}
