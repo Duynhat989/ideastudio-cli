@@ -193,6 +193,7 @@ API_HOST.post('/api/render', renderService.render.bind(renderService))
 API_HOST.post('/api/render/start', renderService.startRender.bind(renderService))
 API_HOST.get('/api/render/jobs/:jobId', renderService.getRenderJob.bind(renderService))
 API_HOST.post('/api/render/jobs/:jobId/cancel', renderService.cancelRenderJob.bind(renderService))
+API_HOST.use('/resources', express.static(path.join(require('../../config').projectPath, 'metadata', 'resources')))
 API_HOST.use('/renders', express.static(path.join(require('../../config').projectPath, 'metadata', 'renders')))
 
 // (req, res) => {

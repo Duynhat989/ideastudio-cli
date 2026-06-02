@@ -5,15 +5,6 @@ const isDev = process.argv.includes('--dev');
 const APP_NAME = 'IdeaStudio';
 
 function resolvePackagedDataRoot() {
-    try {
-        const { app } = require('electron');
-        if (app && typeof app.getPath === 'function') {
-            return app.getPath('userData');
-        }
-    } catch (_) {
-        // Ignore when running in plain node context.
-    }
-
     if (process.platform === 'win32') {
         const roaming = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming');
         return path.join(roaming, APP_NAME);

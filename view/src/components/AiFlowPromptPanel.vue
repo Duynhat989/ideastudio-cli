@@ -1,8 +1,14 @@
 <script setup>
-import { ref, watch, nextTick, computed } from 'vue';
+import { ref, watch, nextTick, computed, onMounted } from 'vue';
 import { Panel } from '@vue-flow/core';
-import { ChevronDown, Loader2, SendHorizontal, ImagePlus, X } from 'lucide-vue-next';
+import { ChevronDown, Loader2, SendHorizontal, ImagePlus, X, Settings } from 'lucide-vue-next';
 import aiPromptBrand from '@/assets/aiprompt.png';
+import {
+    loadAiFlowStructures,
+    getActiveStructureId,
+    setActiveStructureId,
+    getActiveStructure,
+} from '@/services/aiFlowNodeStructures.js';
 
 const MAX_CHAT_IMAGES = 3;
 const AI_FLOW_INPUT_K_STORAGE = 'ai_flow_image_input_k';
@@ -17,17 +23,50 @@ const props = defineProps({
     },
 });
 
-const emit = defineEmits(['build']);
+const emit = defineEmits(['build', 'open-structure-settings']);
 
-const clampInputK = (v) => {
-    const n = Number(v);
-    if (!Number.isFinite(n)) return 1;
-    return Math.min(8, Math.max(1, Math.round(n)));
+const structures = ref([]);
+const activeStructureId = ref(getActiveStructureId());
+
+const activeStructure = computed(
+    () => structures.value.find((s) => s.id === activeStructureId.value) || getActiveStructure(),
+);
+const maxImageInputSlots = computed(() =>
+    Math.min(12, Math.max(1, Number(activeStructure.value?.maxImageInputs) || 8)),
+);
+const clipSecondsHint = computed(() => Number(activeStructure.value?.clipSeconds) || 8);
+
+const reloadStructures = () => {
+    structures.value = loadAiFlowStructures();
+    activeStructureId.value = getActiveStructureId();
 };
 
-const imageInputCount = ref(clampInputK(Number(localStorage.getItem(AI_FLOW_INPUT_K_STORAGE) || '1')));
+onMounted(reloadStructures);
+
+watch(activeStructureId, (id) => {
+    setActiveStructureId(id);
+    const max = maxImageInputSlots.value;
+    if (imageInputCount.value > max) imageInputCount.value = max;
+});
+
+const onStructureSettingsOpen = () => {
+    emit('open-structure-settings');
+};
+
+const clampInputK = (v, max = 8) => {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return 1;
+    return Math.min(max, Math.max(1, Math.round(n)));
+};
+
+const imageInputCount = ref(
+    clampInputK(Number(localStorage.getItem(AI_FLOW_INPUT_K_STORAGE) || '1'), maxImageInputSlots.value),
+);
 watch(imageInputCount, (k) => {
-    localStorage.setItem(AI_FLOW_INPUT_K_STORAGE, String(clampInputK(k)));
+    localStorage.setItem(AI_FLOW_INPUT_K_STORAGE, String(clampInputK(k, maxImageInputSlots.value)));
+});
+watch(maxImageInputSlots, (max) => {
+    if (imageInputCount.value > max) imageInputCount.value = max;
 });
 
 const expanded = ref(false);
@@ -169,8 +208,10 @@ const onComposeKeydown = (e) => {
 const emitBuild = () => {
     const script = buildScriptFromChat();
     if (!script.trim()) return;
-    emit('build', { script, imageInputCount: clampInputK(imageInputCount.value) });
+    emit('build', { script, imageInputCount: clampInputK(imageInputCount.value, maxImageInputSlots.value) });
 };
+
+defineExpose({ reloadStructures });
 </script>
 
 <template>
@@ -188,9 +229,35 @@ const emitBuild = () => {
         <div v-else class="ai-flow-card">
             <div class="ai-flow-card-head">
                 <span class="ai-flow-head-title">Ý tưởng</span>
-                <button type="button" class="ai-flow-collapse" aria-label="Thu gọn" @click="expanded = false">
-                    <ChevronDown :size="18" class="ai-flow-collapse-icon" />
-                </button>
+                <div class="ai-flow-head-actions">
+                    <button
+                        type="button"
+                        class="ai-flow-head-icon"
+                        aria-label="Cấu trúc sinh node"
+                        title="Cấu trúc sinh node"
+                        @click="onStructureSettingsOpen"
+                    >
+                        <Settings :size="16" />
+                    </button>
+                    <button type="button" class="ai-flow-collapse" aria-label="Thu gọn" @click="expanded = false">
+                        <ChevronDown :size="18" class="ai-flow-collapse-icon" />
+                    </button>
+                </div>
+            </div>
+
+            <div class="ai-flow-structure-row">
+                <label class="ai-flow-opt-label" for="ai-flow-structure">
+                    Cấu trúc
+                    <select
+                        id="ai-flow-structure"
+                        v-model="activeStructureId"
+                        class="ai-flow-input-k-select ai-flow-structure-select"
+                        :disabled="busy"
+                        @focus="reloadStructures"
+                    >
+                        <option v-for="s in structures" :key="s.id" :value="s.id">{{ s.name }}</option>
+                    </select>
+                </label>
             </div>
 
             <div ref="threadEl" class="ai-flow-thread custom-scrollbar">
@@ -269,7 +336,7 @@ const emitBuild = () => {
                         class="ai-flow-input-k-select"
                         :disabled="busy"
                     >
-                        <option v-for="n in 8" :key="n" :value="n">{{ n }} ô</option>
+                        <option v-for="n in maxImageInputSlots" :key="n" :value="n">{{ n }} ô</option>
                     </select>
                 </label>
                 <span class="ai-flow-opt-hint">Dùng khi bấm Tạo node</span>
@@ -287,8 +354,8 @@ const emitBuild = () => {
 
             <p v-if="error" class="ai-flow-err">{{ error }}</p>
             <p class="ai-flow-hint">
-                Ảnh đầu vào = số ô <b>imageInput</b> trên flow (Gemini đặt tên từng ô). Chat tối đa <b>{{ MAX_CHAT_IMAGES }}</b>
-                ảnh/thông điệp. Video Gen ≈ <b>8s</b>. Cần <b>start</b> + Gemini trong Setup.
+                Cấu trúc <b>{{ activeStructure.name }}</b> — {{ activeStructure.description || 'Tùy chỉnh prompt sinh node.' }}
+                Ảnh đầu vào = số ô <b>imageInput</b>. Video Gen ≈ <b>{{ clipSecondsHint }}s</b>. Cần <b>Gemini</b> trong Setup.
             </p>
         </div>
     </Panel>
@@ -372,6 +439,40 @@ const emitBuild = () => {
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: #52525b;
+}
+
+.ai-flow-head-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.ai-flow-head-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border: none;
+    border-radius: 0.5rem;
+    background: transparent;
+    color: #71717a;
+    cursor: pointer;
+}
+
+.ai-flow-head-icon:hover {
+    color: #ca8a04;
+    background: #fffbeb;
+}
+
+.ai-flow-structure-row {
+    padding: 0.45rem 0.75rem 0.35rem;
+    border-bottom: 1px solid #f4f4f5;
+    flex-shrink: 0;
+}
+
+.ai-flow-structure-select {
+    max-width: 11rem;
 }
 
 .ai-flow-collapse {

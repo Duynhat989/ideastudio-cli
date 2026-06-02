@@ -25,6 +25,7 @@ import {
 } from 'lucide-vue-next';
 import { projectService } from '@/services/project.service';
 import { notify } from '@/composables/useNotify.js';
+import { runtime } from '@/services/runtime';
 
 const props = defineProps({
   sourceAssets: { type: Array, default: () => [] },
@@ -335,7 +336,7 @@ const onAddExternalFiles = async (e) => {
         nodeId: 'render-resource',
         kind,
       });
-      const url = res?.data?.url || (res?.data?.relativeUrl ? `http://localhost:27123${res.data.relativeUrl}` : '');
+      const url = res?.data?.url || (res?.data?.relativeUrl ? runtime.api(res.data.relativeUrl) : '');
       if (res?.success && url) {
         resources.value.push(url);
       } else {
@@ -384,7 +385,7 @@ const getDurationFromBackend = async (source) => {
   const t = mediaType(source);
   if (!source || (t !== 'video' && t !== 'audio') || !canUseBackendDuration.value) return null;
   try {
-    const res = await fetch('http://localhost:27123/api/meta/media-duration', {
+    const res = await fetch(runtime.api('/api/meta/media-duration'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ source })
@@ -1286,7 +1287,7 @@ const closeRenderModal = async () => {
   const id = renderJobId.value;
   if (id && renderModalStep.value === 'progress') {
     try {
-      await fetch(`http://localhost:27123/api/render/jobs/${id}/cancel`, { method: 'POST' });
+      await fetch(runtime.api(`/api/render/jobs/${id}/cancel`), { method: 'POST' });
     } catch {
       /* ignore */
     }
@@ -1304,7 +1305,7 @@ const cancelRenderFromModal = async () => {
   const id = renderJobId.value;
   if (id) {
     try {
-      await fetch(`http://localhost:27123/api/render/jobs/${id}/cancel`, { method: 'POST' });
+      await fetch(runtime.api(`/api/render/jobs/${id}/cancel`), { method: 'POST' });
     } catch {
       /* ignore */
     }
@@ -1339,7 +1340,9 @@ const chooseRenderOutputPath = async () => {
   const result = await window.electronAPI.invoke('dialog:save-video-path', {
     defaultName: `render-${Date.now()}.mp4`
   });
-  if (result?.success && result.filePath) renderOutputPath.value = result.filePath;
+  if (result?.success && result.filePath) {
+    renderOutputPath.value = result.filePath;
+  }
 };
 
 const startRenderFromModal = async () => {
@@ -1351,7 +1354,7 @@ const startRenderFromModal = async () => {
   renderResult.value = '';
   renderJobId.value = '';
   try {
-    const res = await fetch('http://localhost:27123/api/render/start', {
+    const res = await fetch(runtime.api('/api/render/start'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1370,7 +1373,7 @@ const startRenderFromModal = async () => {
       const pollJobId = renderJobId.value;
       if (!pollJobId) return;
       try {
-        const r = await fetch(`http://localhost:27123/api/render/jobs/${pollJobId}`);
+        const r = await fetch(runtime.api(`/api/render/jobs/${pollJobId}`));
         const j = await r.json();
         if (!r.ok || !j?.success) throw new Error(j?.message || 'Render job error');
         if (renderJobId.value !== pollJobId) return;

@@ -1,5 +1,7 @@
-const API_URL = 'http://localhost:27123/api/projects';
-const API_ROOT = 'http://localhost:27123/api';
+import { runtime } from './runtime';
+
+const API_URL = runtime.api('/api/projects');
+const API_ROOT = runtime.api('/api');
 
 export const projectService = {
     async list() {

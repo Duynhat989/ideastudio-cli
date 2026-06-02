@@ -8,10 +8,11 @@ import {
     Loader2,
     ChevronLeft,
 } from 'lucide-vue-next'
+import { runtime } from '@/services/runtime'
 
 const emit = defineEmits(['login-success'])
 
-const API_BASE = 'http://127.0.0.1:27123'
+const API_BASE = runtime.origin
 const NANO_SIGNIN_BASE = 'https://nanoai.pics/desktop/signin'
 
 const balance = ref(0)

@@ -1,158 +1,93 @@
-# IdeaStudio
+# IdeaStudio CLI
 
-IdeaStudio is an Electron desktop app with a Vue 3 renderer for AI workflow creation, media generation, timeline editing, and final video rendering.
-
-## Tech Stack
-
-- Electron 31
-- Vue 3 + Vite
-- Express (local API server in main process runtime)
-- FFmpeg / FFprobe via `ffmpeg-static` and `ffprobe-static`
-- Electron Builder (NSIS / DMG / AppImage-DEB packaging)
-
-## Project Structure
-
-```text
-IdeaStudio/
-├─ index.js                    # Electron main process bootstrap
-├─ config.js                   # Runtime path strategy (dev vs packaged)
-├─ preload.js                  # Preload bridge
-├─ package.json                # Build scripts and electron-builder config
-├─ build/
-│  └─ installer.nsh            # NSIS custom uninstall prompt
-├─ scripts/
-│  └─ bump-version.js          # Auto bump patch version before build
-├─ src/
-│  ├─ routes/                  # Express routes
-│  └─ services/                # Project / render / meta backend services
-├─ metadata/                   # Dev-only local metadata/static endpoint files
-└─ view/                       # Vue renderer app
-   ├─ package.json
-   ├─ vite.config.js
-   └─ src/
-```
-
-## Environment Requirements
-
-- Node.js 20+
-- npm 10+
-- Windows/macOS/Linux for development
-
-## Install Dependencies
-
-At repo root:
+## Installation
 
 ```bash
-npm install
+npm install -g ideastudio-cli
 ```
 
-In renderer app:
+## Run the App
 
 ```bash
-cd view
-npm install
+ideastudio
 ```
 
-Optional environment in `view/.env`:
-
-```env
-VITE_GOOGLE_CLIENT_ID=your_google_client_id
-```
-
-## Run in Development
-
-Use 2 terminals.
-
-Terminal A (renderer):
+## Full Syntax
 
 ```bash
-cd view
-npm run dev
+ideastudio [command] [--port <number>] [--no-open]
 ```
 
-Terminal B (Electron):
+## Commands
 
 ```bash
-cd ..
-npm start
+ideastudio
 ```
-
-Electron app runs with `--dev` and loads `http://localhost:5173`.
-
-## Build & Packaging
-
-> Note: each build command bumps patch version automatically via `scripts/bump-version.js`.
-
-- Windows:
+Run the release mode (default `start` command).
 
 ```bash
-npm run build:win
+ideastudio dev
 ```
-
-- macOS:
+Run development mode (backend + Vite hot reload).
 
 ```bash
-npm run build:mac
+ideastudio stop
 ```
-
-- Linux:
+Stop the running instance.
 
 ```bash
-npm run build:linux
+ideastudio doctor
 ```
-
-- All targets:
+Show runtime status.
 
 ```bash
-npm run build:all
+ideastudio update
+```
+Show the CLI update command.
+
+## Options After `--`
+
+```bash
+--port <number>
+--port=<number>
+```
+Set the server port (applies to `start`).
+
+```bash
+--no-open
+```
+Do not open the browser automatically after start.
+
+## Examples
+
+```bash
+ideastudio --port 1212
+ideastudio --port=1212 --no-open
+ideastudio stop
 ```
 
-### Important Cross-Platform Notes
+## Stop the App
 
-- Build macOS targets on macOS.
-- Linux AppImage/DEB should be built on Linux (or CI Linux runners).
-- On Windows local machine, prefer `npm run build:win`.
+Method 1: In the terminal running `ideastudio`, press:
 
-## Runtime Data Location
+```bash
+Ctrl + C
+```
 
-The app stores runtime data in a user-writable directory (not beside `.exe` in packaged mode):
+Method 2: From any terminal:
 
-- Dev mode: `<repo>/metadata`
-- Packaged mode: `app.getPath('userData')/metadata`
+```bash
+ideastudio stop
+```
 
-Main data folders:
+## Update to the Latest Version
 
-- `metadata/resources` - projects/assets
-- `metadata/renders` - rendered videos
-- `metadata/config.json` - app runtime config
-- `metadata/version.json` - app metadata/version payload
+```bash
+npm update -g ideastudio-cli
+```
 
-## Uninstall Behavior (Windows NSIS)
+After updating, run again:
 
-During uninstall, the installer asks whether to remove user data:
-
-- Yes -> delete `%APPDATA%\IdeaStudio`
-- No -> keep data
-
-Configured via `build/installer.nsh`.
-
-## Auto Versioning
-
-Patch version increases on each build command:
-
-- `2.1.14 -> 2.1.15`
-
-The same version is synced into `metadata/version.json`.
-
-## Useful Scripts
-
-- `npm start` - run Electron in dev mode
-- `npm run version:bump` - bump patch version only
-- `npm run build:win` - build Windows installer
-- `npm run dist` - alias to Windows build
-
-## Troubleshooting
-
-- If build fails for mac target on Windows: run only `npm run build:win`.
-- If Linux AppImage fails on Windows symlink permission: build Linux target on Linux runner.
-- If static media tools fail, reinstall root deps to ensure `ffmpeg-static` and `ffprobe-static` are present.
+```bash
+ideastudio
+```

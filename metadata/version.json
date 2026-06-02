@@ -1,8 +1,8 @@
 {
   "app": {
     "name": "IdeaStudio",
-    "internalName": "ideastudio-desktop",
-    "description": "Desktop application for IdeaStudio",
+    "internalName": "ideastudio-cli",
+    "description": "Local web application for IdeaStudio",
     "home": "https://idea2vid.com",
     "version": "2.1.26"
   }

@@ -9,6 +9,7 @@ import AuthView from './pages/AuthView.vue'
 import BrowserProfiles from './pages/BrowserProfiles.vue'
 import Notify from './components/Notify.vue'
 import { hasVeo3VideoConfigured } from './utils/veoSetup.js'
+import { notify } from './composables/useNotify.js'
 
 import logo_app from './assets/logo.ico'
 
@@ -120,9 +121,31 @@ watch(isLoading, async (loading) => {
 })
 
 onMounted(() => {
+	const showUpdateNoticeFromUrl = async () => {
+		try {
+			const url = new URL(window.location.href)
+			if (url.searchParams.get('update_available') !== '1') return
+			const current = url.searchParams.get('current_version') || 'current'
+			const latest = url.searchParams.get('latest_version') || 'latest'
+			await notify.alert({
+				title: 'Update available',
+				message: `A newer version is available (${current} -> ${latest}).\nRun: npm update -g ideastudio-cli`,
+				variant: 'warning',
+				confirmText: 'OK',
+			})
+			url.searchParams.delete('update_available')
+			url.searchParams.delete('current_version')
+			url.searchParams.delete('latest_version')
+			window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`)
+		} catch {
+			// ignore URL parse and notice errors
+		}
+	}
+
 	window.electronEvent?.onServerStatus((payload) => {
 		console.log("Server payload:", payload);
 	});
+	showUpdateNoticeFromUrl()
 	setTimeout(() => {
 		isLoading.value = false;
 		window.electronAPI.send('window-fullscreen', {

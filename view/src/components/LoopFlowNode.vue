@@ -14,13 +14,13 @@ const emit = defineEmits(['delete']);
 const imageInputOptions = inject('loopFlowImageInputOptions', computed(() => []));
 const videoInputOptions = inject('loopFlowVideoInputOptions', computed(() => []));
 
-const isElectron = typeof window !== 'undefined' && typeof window.electronAPI?.invoke === 'function';
+const hasBridge = typeof window !== 'undefined' && typeof window.electronAPI?.invoke === 'function';
 
 const onRun = () => props.data.onRun?.();
 const onCancel = () => props.data.onCancel?.();
 
 const pickFolder = async () => {
-  if (!isElectron) return;
+  if (!hasBridge) return;
   const res = await window.electronAPI.invoke('dialog:open-directory');
   if (res?.success && res.path) {
     props.data.onChange?.({ folderPath: res.path });
@@ -59,12 +59,21 @@ const busy = computed(() => props.data?.status === 'running');
       </template>
       <template #config>
         <p class="fn-muted">
-          Lần lượt đẩy file vào node <strong>Ảnh vào</strong> / <strong>Video vào</strong> rồi gọi automation. Chỉ hỗ trợ chọn thư mục trên bản desktop (Electron).
+          Lần lượt đẩy file vào node <strong>Ảnh vào</strong> / <strong>Video vào</strong> rồi gọi automation. Có thể nhập trực tiếp đường dẫn thư mục local.
         </p>
+        <div>
+          <label class="fn-label">Đường dẫn thư mục</label>
+          <input
+            class="fn-input"
+            :value="data.folderPath || ''"
+            placeholder="Ví dụ: D:\\media\\input"
+            @input="data.onChange?.({ folderPath: $event.target.value })"
+          />
+        </div>
         <div class="fn-row" style="gap: 0.35rem; flex-wrap: wrap">
-          <button type="button" class="fn-btn fn-btn-ghost" :disabled="!isElectron" @click="pickFolder">
+          <button type="button" class="fn-btn fn-btn-ghost" :disabled="!hasBridge" @click="pickFolder">
             <FolderOpen :size="16" />
-            Chọn thư mục
+            Dán/chọn thư mục
           </button>
         </div>
         <div>

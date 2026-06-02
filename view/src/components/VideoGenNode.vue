@@ -5,6 +5,7 @@ import { shouldUseVideoPreview } from '@/utils/flowMedia.js';
 import { Handle, Position } from '@vue-flow/core';
 import { Video, Loader2, AlertCircle, CheckCircle2, PlayCircle, XCircle, Download, Trash2 } from 'lucide-vue-next';
 import FlowNodeShell from '@/components/FlowNodeShell.vue';
+import { videoModelsForTier, normalizeVideoModel } from '@/services/flowApiV3.js';
 
 const props = defineProps({
   id: String,
@@ -14,6 +15,7 @@ const props = defineProps({
 
 const emit = defineEmits(['delete']);
 const openImage = inject('openImage');
+const flowVideoTier = inject('flowVideoTier', () => 'ultra');
 
 const nodeStatus = computed(() => props.data?.status ?? 'idle');
 const { elapsedLabel } = useFlowNodeGenTimer(nodeStatus);
@@ -32,6 +34,17 @@ const segmentLabel = computed(() => {
 
 /** `frame` = đầu+cuối (tối đa 2 ảnh). `ingredient` = tham chiếu 1–4 ảnh (API reference). */
 const isFrameMode = computed(() => String(props.data?.type || 'frame').toLowerCase() === 'frame');
+
+const accountVideoTier = computed(() => {
+  const t = flowVideoTier;
+  return typeof t === 'object' && t != null && 'value' in t ? t.value : t;
+});
+
+const videoModelOptions = computed(() => videoModelsForTier(accountVideoTier.value));
+
+const displayVideoModel = computed(() =>
+  normalizeVideoModel(props.data?.videoModel, accountVideoTier.value),
+);
 
 const onRun = () => props.data.onRun?.();
 const onDuplicate = () => props.data.onDuplicate?.();
@@ -135,10 +148,13 @@ const copyError = async () => {
           />
         </div>
         <div>
-          <label class="fn-label">Model</label>
-          <select class="fn-select" :value="data.videoModel" @change="data.onChange?.({ videoModel: $event.target.value })">
-            <option value="VEO_3_FAST">Veo 3 Fast</option>
-            <option value="VEO_3_PRO">Veo 3 Pro</option>
+          <label class="fn-label">Model video</label>
+          <select
+            class="fn-select"
+            :value="displayVideoModel"
+            @change="data.onChange?.({ videoModel: $event.target.value })"
+          >
+            <option v-for="m in videoModelOptions" :key="m.value" :value="m.value">{{ m.label }}</option>
           </select>
         </div>
         <div>

@@ -4,7 +4,7 @@ import { Sparkles, Image as ImageIcon, Video, Upload, Settings2, Download, Play,
 import { set } from 'idb-keyval'
 
 // Thay đổi đường dẫn này trỏ đúng tới file service bạn vừa tạo
-import { generateNanoImage, generateMotionVideo } from '@/services/nanoai'
+import { generateNanoImage, generateMotionVideo, upscaleNanoImage, nanoImageResultUrl } from '@/services/nanoai'
 import { notify } from '@/composables/useNotify.js'
 
 // Trạng thái chế độ: 'image' hoặc 'video'
@@ -202,30 +202,30 @@ const handleUpscale = async (task) => {
     }, 1000)
 
     try {
-        const response = await fetch("https://flow-api.nanoai.pics/api/v2/images/upscale", {
-            method: "POST",
-            headers: {
-                "Authorization": "Bearer YOUR_NANO_TOKEN", // TODO: Thay YOUR_NANO_TOKEN thật
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-                accessToken: "YOUR_ACCESS_TOKEN", // TODO: Thay YOUR_ACCESS_TOKEN thật
-                mediaId: task.mediaId,
-                projectId: task.projectId,
-                targetResolution: "RESOLUTION_2K"
-            })
+        const upscaleData = await upscaleNanoImage({
+            mediaId: task.mediaId,
+            projectId: task.projectId,
+            targetResolution: 'RESOLUTION_2K',
         })
-
-        const data = await response.json()
 
         if (task.timerInterval) clearInterval(task.timerInterval)
 
-        if (data.success && data.result?.encodedImage) {
-            task.result = `data:image/jpeg;base64,${data.result.encodedImage}`
+        const url = upscaleData?.fifeUrl || upscaleData?.encodedImage || upscaleData?.url
+        if (url) {
+            task.result = String(url).startsWith('data:') ? url : await fetch(url).then((r) => r.blob()).then((b) => new Promise((resolve, reject) => {
+                const reader = new FileReader()
+                reader.onloadend = () => resolve(reader.result)
+                reader.onerror = reject
+                reader.readAsDataURL(b)
+            }))
             task.status = 'success'
-            task.isUpscaled = true // Đánh dấu đã upscale
+            task.isUpscaled = true
+        } else if (upscaleData?.encodedImage) {
+            task.result = `data:image/jpeg;base64,${upscaleData.encodedImage}`
+            task.status = 'success'
+            task.isUpscaled = true
         } else {
-            throw new Error(data.message || "Lỗi xử lý từ server khi upscale")
+            throw new Error('Upscale xong nhưng không có URL ảnh trong phản hồi')
         }
     } catch (error) {
         if (task.timerInterval) clearInterval(task.timerInterval)
@@ -295,12 +295,10 @@ const handleGenerate = async () => {
                 task.status = 'success'
 
                 // Trích xuất dữ liệu trả về để chuẩn bị cho hàm Upscale
+                task.result = nanoImageResultUrl(resultData)
                 if (typeof resultData === 'object' && resultData !== null) {
-                    task.result = resultData.url || resultData.imageUrl || resultData.result
                     task.mediaId = resultData.mediaId
                     task.projectId = resultData.projectId
-                } else {
-                    task.result = resultData // Fallback nếu chỉ trả về chuỗi ảnh
                 }
             }
 

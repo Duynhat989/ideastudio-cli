@@ -1,28 +1,40 @@
 {
-  "name": "IdeaStudio",
-  "version": "2.1.26",
+  "name": "ideastudio-cli",
+  "version": "2.1.28",
   "description": "",
   "main": "index.js",
-  "scripts": {
-    "prebuild": "rimraf dist",
-    "version:bump": "node scripts/bump-version.js",
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "chcp 65001 | electron . --dev",
-    "build": "npm run version:bump && electron-builder --win --mac --linux",
-    "build:win": "npm run version:bump && electron-builder --win nsis --x64",
-    "build:mac": "npm run version:bump && electron-builder --mac dmg zip",
-    "build:linux": "npm run version:bump && electron-builder --linux AppImage deb",
-    "build:all": "npm run version:bump && electron-builder -mwl",
-    "dist": "npm run build:win"
+  "bin": {
+    "ideastudio": "bin/ideastudio.js"
   },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node ./bin/ideastudio.js",
+    "start:dev": "node ./bin/ideastudio.js dev",
+    "stop": "node ./bin/ideastudio.js stop",
+    "doctor": "node ./bin/ideastudio.js doctor",
+    "update:cli": "node ./bin/ideastudio.js update",
+    "build:web": "npm --prefix ./view run build -- --outDir ../dist",
+    "build": "npm run build:web",
+    "prepack": "npm run build:web",
+    "prepublishOnly": "npm run build:web",
+    "dev:web": "npm --prefix ./view run dev",
+    "dev": "npm run start:dev"
+  },
+  "files": [
+    "bin",
+    "config.js",
+    "index.js",
+    "src",
+    "dist/**",
+    "metadata/index.html",
+    "metadata/config.json",
+    "metadata/version.json",
+    "README.md"
+  ],
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "devDependencies": {
-    "electron": "^31.7.7",
-    "electron-builder": "^25.1.8",
-    "electron-rebuild": "^3.2.9"
-  },
+  "devDependencies": {},
   "dependencies": {
     "cors": "^2.8.6",
     "dotenv": "^16.4.5",
@@ -35,45 +47,8 @@
     "multer": "^1.4.5-lts.1",
     "uuid": "^8.3.2"
   },
-  "build": {
-    "appId": "com.ideastudio.app",
-    "productName": "IdeaStudio",
-    "files": [
-      "**/*",
-      "!dist/**",
-      "!metadata/**"
-    ],
-    "asarUnpack": [
-      "node_modules/ffmpeg-static/**",
-      "node_modules/ffprobe-static/**"
-    ],
-    "extraResources": [],
-    "win": {
-      "icon": "src/assets/logo.ico",
-      "target": [
-        "nsis"
-      ]
-    },
-    "mac": {
-      "target": [
-        "dmg",
-        "zip"
-      ],
-      "category": "public.app-category.video"
-    },
-    "linux": {
-      "target": [
-        "AppImage",
-        "deb"
-      ],
-      "category": "Video"
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "installerIcon": "src/assets/logo.ico",
-      "uninstallerIcon": "src/assets/logo.ico",
-      "include": "build/installer.nsh"
-    }
+  "build": {},
+  "engines": {
+    "node": ">=18"
   }
 }

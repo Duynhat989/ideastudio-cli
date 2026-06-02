@@ -1,9 +1,39 @@
+import { runtime } from './runtime';
+import {
+  FLOW_API_V3_BASE,
+  FLOW_API_V2_BASE,
+  FLOW_TASK_POLL_MS,
+  normalizeImageModel,
+  normalizeVideoModel,
+  normalizeVideoTier,
+  nanoImageResultUrl,
+  normalizeWorkflowDefaults,
+  DEFAULT_WORKFLOW_MODELS,
+} from './flowApiV3.js';
+
+export { nanoImageResultUrl } from './flowApiV3.js';
+export {
+  FLOW_API_V3_BASE,
+  IMAGE_MODELS,
+  IMAGE_RATIO_OPTIONS,
+  VIDEO_MODELS,
+  VIDEO_TIERS,
+  VIDEO_RATIO_OPTIONS,
+  videoModelsForTier,
+  normalizeImageModel,
+  normalizeVideoModel,
+  normalizeVideoTier,
+  normalizeWorkflowDefaults,
+  DEFAULT_WORKFLOW_MODELS,
+} from './flowApiV3.js';
+
 export const getSettings = () => {
   const defaultSettings = {
     nanoToken: '',
     imageAccessToken: '',
     videoAccessToken: '',
     videoCookie: '',
+    videoTier: 'ultra',
     imageAspectRatio: 'IMAGE_ASPECT_RATIO_LANDSCAPE',
     videoAspectRatio: 'VIDEO_ASPECT_RATIO_LANDSCAPE',
     grokUrl: 'https://api.x.ai/v1/chat/completions',
@@ -27,6 +57,7 @@ export const getSettings = () => {
     videoCookie: veo.cookie || parsed.videoCookie || '',
     geminiApiKey: setupParsed?.gemini?.apiKey || parsed.geminiApiKey || '',
     geminiModel: setupParsed?.gemini?.model || parsed.geminiModel || 'gemini-3-flash-preview',
+    videoTier: normalizeVideoTier(veo.videoTier || setupParsed?.nano?.videoTier || parsed.videoTier),
   };
 };
 
@@ -444,8 +475,8 @@ export {
   GEMINI_FLOW_CLIP_BATCH_SCHEMA,
 } from './geminiFlowSchemas.js';
 
-async function pollTask(taskId, nanoToken, type) {
-  const url = `https://flow-api.nanoai.pics/api/v2/task?taskId=${taskId}`;
+async function pollTask(taskId, nanoToken, type, { returnData = false } = {}) {
+  const url = `${FLOW_API_V3_BASE}/task?taskId=${encodeURIComponent(taskId)}`;
   const extractTaskErrorMessage = (payload) => {
     const mediaErrors = (payload?.data?.media || [])
       .map((m) => {
@@ -476,16 +507,39 @@ async function pollTask(taskId, nanoToken, type) {
     });
     const result = await response.json();
 
+    if (response.status === 404) {
+      throw new Error(result.message || 'Task not found (expired or invalid taskId)');
+    }
+
     if (result.success && result.code === 'success') {
-      return type === 'image' ? result.data.fifeUrl : result.data.mediaUrl;
+      if (returnData) return result.data || {};
+      if (type === 'image') return result.data?.fifeUrl;
+      if (type === 'rawBytes') return result.data?.rawBytes;
+      return result.data?.mediaUrl;
     }
 
     if (result.code === 'processing') {
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      await new Promise((resolve) => setTimeout(resolve, FLOW_TASK_POLL_MS));
       continue;
     }
     throw new Error(extractTaskErrorMessage(result));
   }
+}
+
+async function createFlowTask(path, body, nanoToken) {
+  const response = await fetch(`${FLOW_API_V3_BASE}${path}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${nanoToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  const data = await response.json();
+  if (!response.ok || !data?.taskId) {
+    throw new Error(data.message || data.error || `Failed to create task (${response.status})`);
+  }
+  return data.taskId;
 }
 
 async function toBase64(url) {
@@ -539,28 +593,73 @@ export async function generateNanoImage(params) {
     }
 
     const imageUrls = await ensureFullImageDataUrls(params.imageUrls);
+    const ratio = params.ratio || params.aspectRatio || settings.imageAspectRatio || 'IMAGE_ASPECT_RATIO_LANDSCAPE';
+    const imageModel = normalizeImageModel(params.imageModel);
 
-    const response = await fetch("https://flow-api.nanoai.pics/api/v2/images/create", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${settings.nanoToken}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        accessToken: settings.imageAccessToken,
-        promptText: params.prompt,
-        imageUrls,
-        aspectRatio: params.aspectRatio || "IMAGE_ASPECT_RATIO_PORTRAIT",
-        imageModel: params.imageModel
-      })
-    });
+    const taskId = await createFlowTask('/images/create', {
+      accessToken: settings.imageAccessToken,
+      promptText: params.prompt,
+      imageUrls,
+      ratio,
+      imageModel,
+    }, settings.nanoToken);
 
-    const data = await response.json();
-    if (!data.taskId) throw new Error(data.message || "Failed to create image task");
-
-    const mediaUrl = await pollTask(data.taskId, settings.nanoToken, 'image');
-    return await toBase64(mediaUrl);
+    const taskData = await pollTask(taskId, settings.nanoToken, 'image', { returnData: true });
+    const fifeUrl = taskData.fifeUrl;
+    if (!fifeUrl) throw new Error('Gen image success but missing fifeUrl');
+    const dataUrl = await toBase64(fifeUrl);
+    return {
+      dataUrl,
+      url: dataUrl,
+      mediaId: taskData.mediaId,
+      projectId: taskData.projectId,
+      fifeUrl,
+      aspectRatio: taskData.aspectRatio,
+      imageModel: taskData.imageModel,
+    };
   }, 3);
+}
+
+export async function upscaleNanoImage(params) {
+  const settings = getSettings();
+  if (!settings.nanoToken || !settings.imageAccessToken) {
+    throw new Error('Please configure NanoAI settings first');
+  }
+  const taskId = await createFlowTask('/images/upscale', {
+    accessToken: settings.imageAccessToken,
+    mediaId: params.mediaId,
+    projectId: params.projectId,
+    targetResolution: params.targetResolution || 'RESOLUTION_2K',
+  }, settings.nanoToken);
+  return pollTask(taskId, settings.nanoToken, 'image', { returnData: true });
+}
+
+export async function upscaleNanoVideo(params) {
+  const settings = getSettings();
+  if (!settings.nanoToken || !settings.videoAccessToken || !settings.videoCookie) {
+    throw new Error('Please configure NanoAI settings first');
+  }
+  const ratio = params.ratio || params.aspectRatio || settings.videoAspectRatio || 'VIDEO_ASPECT_RATIO_LANDSCAPE';
+  const taskId = await createFlowTask('/videos/upscale', {
+    accessToken: settings.videoAccessToken,
+    mediaId: params.mediaId,
+    projectId: params.projectId,
+    cookie: settings.videoCookie,
+    workflowId: params.workflowId || '',
+    ratio,
+  }, settings.nanoToken);
+
+  const taskData = await pollTask(taskId, settings.nanoToken, 'video', { returnData: true });
+  if (taskData.rawBytes) {
+    const bytes = taskData.rawBytes;
+    const dataUrl = String(bytes).startsWith('data:')
+      ? bytes
+      : `data:video/mp4;base64,${bytes}`;
+    return { ...taskData, dataUrl, mediaUrl: dataUrl };
+  }
+  const mediaUrl = taskData.mediaUrl;
+  if (!mediaUrl) throw new Error('Upscale video finished without mediaUrl or rawBytes');
+  return { ...taskData, mediaUrl };
 }
 
 export async function generateNanoVideo(params) {
@@ -571,28 +670,22 @@ export async function generateNanoVideo(params) {
     }
 
     const imageUrls = await ensureFullImageDataUrls(params.imageUrls);
+    const tier = normalizeVideoTier(params.tier || settings.videoTier);
+    const ratio = params.ratio || params.aspectRatio || settings.videoAspectRatio || 'VIDEO_ASPECT_RATIO_LANDSCAPE';
+    const videoModel = normalizeVideoModel(params.videoModel, tier);
 
-    const response = await fetch("https://flow-api.nanoai.pics/api/v2/videos/create", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${settings.nanoToken}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        accessToken: settings.videoAccessToken,
-        cookie: settings.videoCookie,
-        promptText: params.prompt,
-        imageUrls,
-        aspectRatio: params.aspectRatio || "VIDEO_ASPECT_RATIO_PORTRAIT",
-        videoModel: params.videoModel,
-        type: params.type
-      })
-    });
+    const taskId = await createFlowTask('/videos/create', {
+      accessToken: settings.videoAccessToken,
+      cookie: settings.videoCookie,
+      promptText: params.prompt,
+      imageUrls,
+      ratio,
+      videoModel,
+      type: params.type || 'frame',
+      tier,
+    }, settings.nanoToken);
 
-    const data = await response.json();
-    if (!data.taskId) throw new Error(data.message || "Failed to create video task");
-
-    const mediaUrl = await pollTask(data.taskId, settings.nanoToken, 'video');
+    const mediaUrl = await pollTask(taskId, settings.nanoToken, 'video');
     const videoResponse = await fetch(mediaUrl);
     const blob = await videoResponse.blob();
     return URL.createObjectURL(blob);
@@ -605,7 +698,7 @@ export async function mergeNanoVideos(videoUrls) {
     throw new Error("Please configure NanoAI settings first");
   }
 
-  const response = await fetch("https://flow-api.nanoai.pics/api/v2/videos/merge", {
+  const response = await fetch(`${FLOW_API_V2_BASE}/videos/merge`, {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${settings.nanoToken}`,
@@ -666,7 +759,7 @@ export async function uploadMotionVideo(videoFileOrBlob) {
   if (typeof videoFileOrBlob === 'string') {
     const localAssetMatch = videoFileOrBlob.includes('/resources/') || videoFileOrBlob.includes('metadata/resources/');
     if (localAssetMatch) {
-      const localRes = await fetch("http://localhost:27123/api/meta/upload-video-from-asset", {
+      const localRes = await fetch(runtime.api('/api/meta/upload-video-from-asset'), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

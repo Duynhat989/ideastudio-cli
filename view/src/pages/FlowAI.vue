@@ -14,7 +14,6 @@ import {
     Type,
     X,
     Maximize2,
-    Eraser,
     FolderOpen,
     Cpu,
     Loader2,
@@ -24,6 +23,7 @@ import {
     Clock,
     Repeat,
     Flag,
+    Settings,
 } from 'lucide-vue-next';
 
 import '@vue-flow/core/dist/style.css';
@@ -43,6 +43,8 @@ import AiCallNode from '@/components/AiCallNode.vue';
 import LoopFlowNode from '@/components/LoopFlowNode.vue';
 import LoopEndNode from '@/components/LoopEndNode.vue';
 import AiFlowPromptPanel from '@/components/AiFlowPromptPanel.vue';
+import AiFlowStructureSettingsPopup from '@/components/AiFlowStructureSettingsPopup.vue';
+import FlowWorkflowSettingsPopup from '@/components/FlowWorkflowSettingsPopup.vue';
 import ProjectModal from '@/components/ProjectModal.vue';
 import ProjectManagerPage from '@/components/ProjectManagerPage.vue';
 import RenderView from './RenderView.vue';
@@ -55,13 +57,25 @@ import {
     callGemini,
     callGeminiStreamText,
     callGeminiStructured,
-    GEMINI_FLOW_FRAME_SCHEMA,
-    GEMINI_FLOW_CLIP_BATCH_SCHEMA,
     generateMotionVideo,
     getSettings,
     saveSettings,
+    nanoImageResultUrl,
 } from '@/services/nanoai';
+import {
+    videoModelsForTier,
+    normalizeVideoModel,
+    normalizeVideoTier,
+    normalizeImageModel,
+    normalizeWorkflowDefaults,
+    DEFAULT_WORKFLOW_MODELS,
+} from '@/services/flowApiV3.js';
 import { notify } from '@/composables/useNotify.js';
+import {
+    getActiveStructure,
+    interpolatePromptLines,
+} from '@/services/aiFlowNodeStructures.js';
+import { buildGraphFromStructure } from '@/services/aiFlowGraphBuilder.js';
 
 const props = defineProps({
     openProjectManagerKey: {
@@ -164,6 +178,9 @@ const aiCallPrompt = ref('');
 const aiCallResult = ref('');
 const aiCallStatus = ref('idle');
 const isAddMenuOpen = ref(false);
+const isWorkflowSettingsOpen = ref(false);
+const isAiFlowStructureSettingsOpen = ref(false);
+const aiFlowPromptPanelRef = ref(null);
 const aiFlowBusy = ref(false);
 const aiFlowError = ref('');
 const isLoaded = ref(false);
@@ -274,6 +291,25 @@ const sourceAssets = computed(() => {
 // --- CORE FUNCTIONS (API & STORAGE) ---
 const projectOpenData = ref({});
 
+/** Model mặc định cho node mới (Workflow Tools); đổi trên node không ảnh hưởng giá trị này. */
+const workflowDefaults = ref({ ...DEFAULT_WORKFLOW_MODELS });
+
+const flowVideoTier = computed(() => normalizeVideoTier(getSettings().videoTier));
+const workflowVideoModelOptions = computed(() => videoModelsForTier(flowVideoTier.value));
+
+provide('flowVideoTier', flowVideoTier);
+
+const applyWorkflowDefaultsFromProject = (project) => {
+    workflowDefaults.value = normalizeWorkflowDefaults(project?.workflowDefaults, flowVideoTier.value);
+};
+
+watch(flowVideoTier, (tier) => {
+    const models = videoModelsForTier(tier);
+    if (!models.some((m) => m.value === workflowDefaults.value.videoModel)) {
+        workflowDefaults.value.videoModel = models[0]?.value || DEFAULT_WORKFLOW_MODELS.videoModel;
+    }
+});
+
 /** Tỷ lệ khung viewport node gen ảnh/video (theo project) — tránh nhảy kích thước khi có kết quả */
 const flowGenViewportAspect = computed(() => cssAspectRatioFromProject(projectOpenData.value));
 const loadProject = async (projectId) => {
@@ -292,6 +328,7 @@ const loadProject = async (projectId) => {
 
             if (project) {
                 projectOpenData.value = project;
+                applyWorkflowDefaultsFromProject(project);
                 console.log('projectOpenData.value', projectOpenData.value);
                 const nodesToSet = (project.nodes || []).map((n) => setupNodeCallbacks(n));
                 setNodes(nodesToSet);
@@ -320,6 +357,9 @@ const buildCleanFlowJson = () => {
             onChange, onRun, onCancel, onDuplicate, onReorder,
             elapsedTime, ...cleanData
         } = nodeData;
+        if (rawNode.type === 'videoGen' && cleanData.tier != null) {
+            delete cleanData.tier;
+        }
         return {
             id: rawNode.id,
             type: rawNode.type,
@@ -413,6 +453,7 @@ const persistFlowToServer = async ({ announce = false } = {}) => {
         await projectService.update(currentProjectId.value, {
             nodes: serializableNodes,
             edges: serializableEdges,
+            workflowDefaults: { ...workflowDefaults.value },
         });
         lastAutoSaveAt.value = Date.now();
         autoSaveError.value = null;
@@ -451,6 +492,7 @@ const exportFlow = () => {
     const payload = {
         version: 1,
         exportedAt: new Date().toISOString(),
+        workflowDefaults: { ...workflowDefaults.value },
         nodes: serializableNodes,
         edges: serializableEdges,
     };
@@ -512,6 +554,10 @@ const importFlow = async (e) => {
             variant: 'warning',
         });
         if (!okImport) return;
+
+        if (parsed.workflowDefaults && typeof parsed.workflowDefaults === 'object') {
+            workflowDefaults.value = normalizeWorkflowDefaults(parsed.workflowDefaults, flowVideoTier.value);
+        }
 
         const allowedTypes = new Set(Object.keys(nodeTypes));
         const sanitizedNodes = [];
@@ -581,6 +627,11 @@ const setupNodeCallbacks = (node) => {
         let vt = String(baseData.type || 'frame').toLowerCase();
         if (vt === 'text') vt = 'ingredient';
         baseData.type = vt === 'ingredient' ? 'ingredient' : 'frame';
+        delete baseData.tier;
+        baseData.videoModel = normalizeVideoModel(baseData.videoModel, flowVideoTier.value);
+    }
+    if (node.type === 'imageGen') {
+        baseData.imageModel = normalizeImageModel(baseData.imageModel);
     }
     return {
         ...node,
@@ -764,7 +815,7 @@ async function runLoopFlowAutomation(nodeId, options = {}) {
 
     try {
         if (!isElectron) {
-            throw new Error('Loop Flow cần ứng dụng desktop (Electron) để chọn thư mục và đọc file.');
+            throw new Error('Loop Flow API chưa sẵn sàng.');
         }
         const d = node.data || {};
         const rootPath = String(d.folderPath || '').trim();
@@ -1069,7 +1120,13 @@ const executeNode = async (nodeId) => {
             let lastErr = null;
             for (let attempt = 1; attempt <= 3; attempt += 1) {
                 try {
-                    result = await generateNanoImage({ prompt: safePrompt, imageUrls: refs, imageModel: node.data.imageModel, aspectRatio: projectOpenData.value?.imageAspectRatio });
+                    result = await generateNanoImage({
+                        prompt: safePrompt,
+                        imageUrls: refs,
+                        imageModel: node.data.imageModel,
+                        ratio: projectOpenData.value?.imageAspectRatio,
+                    });
+                    result = nanoImageResultUrl(result);
                     lastErr = null;
                     break;
                 } catch (err) {
@@ -1099,7 +1156,13 @@ const executeNode = async (nodeId) => {
             let lastErr = null;
             for (let attempt = 1; attempt <= 3; attempt += 1) {
                 try {
-                    result = await generateNanoVideo({ prompt: safePrompt, imageUrls: refs, videoModel: node.data.videoModel, type: node.data.type, aspectRatio: projectOpenData.value?.videoAspectRatio });
+                    result = await generateNanoVideo({
+                        prompt: safePrompt,
+                        imageUrls: refs,
+                        videoModel: node.data.videoModel,
+                        type: node.data.type,
+                        ratio: projectOpenData.value?.videoAspectRatio,
+                    });
                     lastErr = null;
                     break;
                 } catch (err) {
@@ -1204,32 +1267,7 @@ const addNode = (type) => {
         id,
         type,
         position: { x: Math.random() * 200 + 100, y: Math.random() * 200 + 100 },
-        data: {
-            inputs: [], result: null, status: 'idle',
-            name: type === 'imageInput' ? '' : undefined,
-            prompt: (type === 'imageGen' || type === 'videoGen' || type === 'aiCall' || type === 'klingMotion') ? '' : undefined,
-            keyword: type === 'textInput' ? '{{keyword}}' : (type === 'aiCall' ? '{{resultai}}' : undefined),
-            value: type === 'textInput' ? '' : undefined,
-            clipDurationSec: type === 'videoGen' ? 8 : undefined,
-            segmentLabel: type === 'videoGen' ? '' : undefined,
-            video: type === 'videoInput' ? null : undefined,
-            characterOrientation: type === 'klingMotion' ? 'video' : undefined,
-            cfgScale: type === 'klingMotion' ? 0.5 : undefined,
-            timeVideo: type === 'klingMotion' ? 9 : undefined,
-            ...(type === 'loopFlow'
-                ? {
-                      folderPath: '',
-                      classifyMode: 'byExtension',
-                      imageSubfolder: 'images',
-                      videoSubfolder: 'videos',
-                      targetImageInputId: '',
-                      targetVideoInputId: '',
-                      advanceMode: 'untilIdle',
-                      intervalSec: 30,
-                      loopProgress: '',
-                  }
-                : {}),
-        }
+        data: defaultDataForFlowType(type),
     });
     addNodes([newNode]);
 };
@@ -1293,9 +1331,18 @@ const defaultDataForFlowType = (type) => {
     const base = { inputs: [], result: null, status: 'idle' };
     if (type === 'imageInput') return { ...base, image: null, name: '' };
     if (type === 'videoInput') return { ...base, video: null };
-    if (type === 'imageGen') return { ...base, prompt: '', imageModel: 'GEM_PIX_2' };
+    if (type === 'imageGen') {
+        return { ...base, prompt: '', imageModel: workflowDefaults.value.imageModel };
+    }
     if (type === 'videoGen') {
-        return { ...base, prompt: '', videoModel: 'VEO_3_FAST', type: 'frame', clipDurationSec: 8, segmentLabel: '' };
+        return {
+            ...base,
+            prompt: '',
+            videoModel: workflowDefaults.value.videoModel,
+            type: 'frame',
+            clipDurationSec: 8,
+            segmentLabel: '',
+        };
     }
     if (type === 'klingMotion') return { ...base, prompt: '', characterOrientation: 'video', cfgScale: 0.5, timeVideo: 9 };
     if (type === 'aiCall') return { ...base, prompt: '', keyword: '{{resultai}}' };
@@ -1335,6 +1382,11 @@ const mergeNodeData = (type, partial) => {
         let vt = String(merged.type || 'frame').toLowerCase();
         if (vt === 'text') vt = 'ingredient';
         merged.type = vt === 'ingredient' ? 'ingredient' : 'frame';
+        delete merged.tier;
+        merged.videoModel = normalizeVideoModel(merged.videoModel, flowVideoTier.value);
+    }
+    if (type === 'imageGen') {
+        merged.imageModel = normalizeImageModel(merged.imageModel);
     }
     if (type === 'loopFlow') {
         merged.classifyMode = merged.classifyMode === 'bySubfolder' ? 'bySubfolder' : 'byExtension';
@@ -1613,23 +1665,19 @@ const runAiFlowPromptChatTurn = async ({ transcript, userMessage, imageUrls = []
     aiFlowError.value = '';
     aiFlowBusy.value = true;
     try {
+        const structure = getActiveStructure();
+        const clipSeconds = structure?.clipSeconds || FLOW_VIDEO_CLIP_SECONDS;
         const imgs = Array.isArray(imageUrls) ? imageUrls.filter((u) => typeof u === 'string' && u) : [];
         const imgNote =
             imgs.length > 0
                 ? ` User đính kèm ${imgs.length} hình ảnh trong request này (cùng lượt với tin nhắn dưới) — hãy đọc ảnh, mô tả ngắn những gì thấy và gắn với phân tích kịch bản / ý tưởng.`
                 : '';
-        const prompt = [
-            'Bạn là biên kịch / producer, đang chat với người dùng để cùng phát triển và chỉnh sửa ý tưởng cho pipeline sáng tạo (workflow: ảnh → video, không Kling Motion).',
-            'Trả lời súc tích, thực tế bằng tiếng Việt; có thể hỏi lại, gợi ý chỉnh kịch, thứ tự bước, thời lượng (mỗi Video Gen ~8s), tên từng ảnh input…',
-            'BẮT BUỘC phản ánh thứ tự: ảnh sản phẩm/đầu vào → Image Gen nếu cần → Video Gen; layout node trên canvas không đè nhau.',
-            `Mỗi clip video trong pipeline ≈ ${FLOW_VIDEO_CLIP_SECONDS} giây khi tính số node.`,
-            imgNote,
-            'Trả về văn bản thuần tiếng Việt, không markdown code block, không JSON.',
-            '\n--- Hội thoại trước ---\n',
-            transcript || '(chưa có).',
-            '\n--- User vừa nhắn ---\n',
-            userMessage || '(không có chữ — chỉ xem ảnh đính kèm nếu có)',
-        ].join('\n');
+        const prompt = interpolatePromptLines(structure.chatPromptLines, {
+            clipSeconds,
+            imageNote: imgNote,
+            transcript: transcript || '(chưa có).',
+            userMessage: userMessage || '(không có chữ — chỉ xem ảnh đính kèm nếu có)',
+        });
         const text = await callGeminiStreamText(prompt, {
             imageUrls: imgs,
             onChunk,
@@ -1651,23 +1699,6 @@ const clampInt = (v, min, max, fallback) => {
     return Math.min(max, Math.max(min, Math.round(n)));
 };
 
-/** Nhãn từng ô imageInput (Gemini có thể trả ít/xen schema cũ originalImageName). */
-const resolveAiFlowOriginalImageLabels = (frame, k) => {
-    const fallback = (i) => `Ảnh đầu vào ${i + 1}`;
-    const arr = Array.isArray(frame?.originalImageNames) ? frame.originalImageNames : [];
-    const legacyOne =
-        typeof frame?.originalImageName === 'string' && String(frame.originalImageName).trim()
-            ? clampText(frame.originalImageName, 90)
-            : '';
-    const rows = [];
-    for (let i = 0; i < k; i += 1) {
-        let s = clampText(arr[i], 90);
-        if (!s && legacyOne) s = legacyOne;
-        rows.push(s || fallback(i));
-    }
-    return rows;
-};
-
 const runGeminiBuildNodes = async (evt) => {
     const script =
         typeof evt === 'object' && evt !== null && typeof evt.script === 'string'
@@ -1686,194 +1717,23 @@ const runGeminiBuildNodes = async (evt) => {
     aiFlowError.value = '';
     aiFlowBusy.value = true;
     try {
+        const structure = getActiveStructure();
+        const maxImageInputs = clampInt(structure?.maxImageInputs, 1, 12, AI_FLOW_MAX_IMAGE_INPUTS);
         const imageInputCount = clampInt(
             typeof evt === 'object' && evt !== null ? evt.imageInputCount : undefined,
             1,
-            AI_FLOW_MAX_IMAGE_INPUTS,
+            maxImageInputs,
             1,
         );
-        const phase1Prompt = [
-            'Bạn là kỹ sư workflow video ads.',
-            'PHASE 1 (khung): trả object gồm scriptSummary, totalVideoClips, originalImageNames (MẢNG), clipLabels, và tùy chọn generateEndingKeyframe + endingImageGenPrompt.',
-            `Số ô upload ảnh trên canvas (imageInput nodes) được user chọn: K = ${imageInputCount}.`,
-            `Trả originalImageNames là mảng tiếng Việt có ĐÚNG ${imageInputCount} phần tử — mỗi phần tử là một dòng NHÃN NGẮN mô tả vai trò từng ảnh (ví dụ: hero sản phẩm chính, góc hộp, logo thương hiệu, moodboard/lighting…) phù hợp kịch bản, không ghép một nhãn chung.`,
-            `Mỗi clip video dài khoảng ${FLOW_VIDEO_CLIP_SECONDS} giây. Nếu script có thời lượng tổng T giây thì totalVideoClips = ceil(T/${FLOW_VIDEO_CLIP_SECONDS}).`,
-            'Ràng buộc nghiệp vụ bắt buộc: các ảnh đầu vào (imageInput) là tham chiếu cho các bước imageGen và videoGen. Không dùng klingMotion.',
-            'Chuỗi keyframe liền mạch: clip i dùng ảnh cảnh i làm khung ĐẦU và ảnh cảnh i+1 làm khung CUỐI (nối tiếp). Clip cuối chỉ cần một ảnh đầu trừ khi kịch bản yêu cầu rõ frame/packshot kết thúc.',
-            'generateEndingKeyframe = true CHỈ khi user/kịch bản cần ảnh kết thúc riêng (đóng clip cuối từ keyframe cảnh cuối → ảnh đóng); kèm endingImageGenPrompt tiếng Việt. Ngược lại để false (mặc định) — clip cuối chỉ một ảnh start.',
-            'clipLabels cần đúng thứ tự câu chuyện, ngắn, tiếng Việt.',
-            '\n--- Kịch bản đã chốt ---\n',
+        const graph = await buildGraphFromStructure({
+            structure,
             script,
-        ].join('\n');
-        const frame = await callGeminiStructured(phase1Prompt, {
-            responseSchema: GEMINI_FLOW_FRAME_SCHEMA,
-            maxOutputTokens: 700,
+            imageInputCount,
+            callGeminiStructured,
+            sanitizeVideoPromptForSafety,
         });
-
-        const clipCount = clampInt(frame?.totalVideoClips, 1, 12, 3);
-        const rawLabels = Array.isArray(frame?.clipLabels) ? frame.clipLabels : [];
-        const clipLabels = Array.from({ length: clipCount }, (_, i) => {
-            const fallback = `Clip ${i + 1}/${clipCount}`;
-            const text = clampText(rawLabels[i], 70);
-            return text || fallback;
-        });
-        const originalImageLabels = resolveAiFlowOriginalImageLabels(frame, imageInputCount);
-        const scriptSummary = clampText(frame?.scriptSummary, 220) || 'Flow quảng cáo sản phẩm theo kịch bản đã chốt.';
-        const generateEndingKeyframe = frame?.generateEndingKeyframe === true;
-        const endingImageGenPrompt = clampText(frame?.endingImageGenPrompt, 320) || '';
-
-        const clipPromptItems = [];
-        const batchSize = 3;
-        for (let start = 0; start < clipCount; start += batchSize) {
-            const end = Math.min(clipCount, start + batchSize);
-            const batch = clipLabels.slice(start, end).map((label, i) => ({
-                index: start + i + 1,
-                label,
-            }));
-            const phase2Prompt = [
-                'Bạn đang PHASE 2: sinh prompt cho MỘT NHÓM clip nhỏ.',
-                'Trả về danh sách clips theo schema: index, segmentLabel, imageGenPrompt, videoGenPrompt.',
-                `Luôn giữ luồng: ${imageInputCount} ảnh tham chiếu (upload) có thể dùng khi sinh prompt cảnh; imageGen cảnh -> videoGen cảnh.`,
-                'videoGenPrompt phải mô tả cảnh động cụ thể và kế thừa nhận diện sản phẩm từ imageGenPrompt cùng index, dùng ngôn ngữ trung tính, lịch sự, phù hợp quảng cáo sản phẩm.',
-                'Nếu videoGenPrompt có người, BẮT BUỘC ghi rõ là người trưởng thành và nêu tuổi cụ thể (ví dụ: "An adult woman (age 25)..."). Không mô tả trẻ vị thành niên.',
-                `Mỗi clip ~${FLOW_VIDEO_CLIP_SECONDS}s, segmentLabel dạng "Clip i/N · mốc thời gian".`,
-                'Không markdown, không text ngoài schema.',
-                '\n--- Script ---\n',
-                script,
-                '\n--- Tóm tắt ---\n',
-                scriptSummary,
-                '\n--- Batch cần sinh ---\n',
-                JSON.stringify({ totalClips: clipCount, items: batch }),
-            ].join('\n');
-            const batchResult = await callGeminiStructured(phase2Prompt, {
-                responseSchema: GEMINI_FLOW_CLIP_BATCH_SCHEMA,
-                maxOutputTokens: 900,
-            });
-            const rows = Array.isArray(batchResult?.clips) ? batchResult.clips : [];
-            rows.forEach((row, rowIdx) => {
-                const index = clampInt(row?.index, 1, clipCount, start + rowIdx + 1);
-                clipPromptItems.push({
-                    index,
-                    segmentLabel: clampText(row?.segmentLabel, 70) || `Clip ${index}/${clipCount}`,
-                    imageGenPrompt:
-                        clampText(row?.imageGenPrompt, 320) ||
-                        `Tạo keyframe cảnh ${index}/${clipCount}, nêu rõ sản phẩm và bối cảnh để giữ đồng nhất nhận diện.`,
-                    videoGenPrompt:
-                        sanitizeVideoPromptForSafety(
-                            clampText(row?.videoGenPrompt, 320) ||
-                            `Tạo video cảnh ${index}/${clipCount} từ ảnh keyframe tương ứng, nêu rõ góc máy/chuyển động/ánh sáng và hành động chính. prompt video và text không chứa các từ nhạy cảm để tránh bị lỗi PUBLIC_ERROR_SEXUAL | NCII`
-                        ),
-                });
-            });
-        }
-
-        const clipByIndex = new Map();
-        clipPromptItems.forEach((item) => {
-            if (!clipByIndex.has(item.index)) clipByIndex.set(item.index, item);
-        });
-        const normalizedClips = Array.from({ length: clipCount }, (_, i) => {
-            const idx = i + 1;
-            const existing = clipByIndex.get(idx);
-            return (
-                existing || {
-                    index: idx,
-                    segmentLabel: `Clip ${idx}/${clipCount}`,
-                    imageGenPrompt: `Tạo keyframe cảnh ${idx}/${clipCount}, giữ sản phẩm nhất quán với ảnh gốc.`,
-                    videoGenPrompt: sanitizeVideoPromptForSafety(`Tạo video cảnh ${idx}/${clipCount}, bám theo keyframe cùng index, chuyển động tự nhiên.`),
-                }
-            );
-        });
-
-        const rowGap = 230;
-        const inputSlotGap = 116;
-        const xStart = 40;
-        const xImageInput = 360;
-        const xImageGen = 700;
-        const xVideoGen = 1040;
-        const xPreview = 1380;
-        const endingIgNode = generateEndingKeyframe
-            ? {
-                  type: 'imageGen',
-                  position: { x: xImageGen, y: 60 + clipCount * rowGap },
-                  data: {
-                      prompt:
-                          endingImageGenPrompt ||
-                          'Keyframe / packshot kết thúc, giữ nhất quán sản phẩm với ảnh tham chiếu, ánh sáng gọn gàng.',
-                  },
-              }
-            : null;
-
-        const nodesOut = [
-            { type: 'start', position: { x: xStart, y: 60 } },
-            ...originalImageLabels.map((name, j) => ({
-                type: 'imageInput',
-                position: { x: xImageInput, y: 60 + j * inputSlotGap },
-                data: { name },
-            })),
-            ...normalizedClips.map((clip, i) => ({
-                type: 'imageGen',
-                position: { x: xImageGen, y: 60 + i * rowGap },
-                data: { prompt: clip.imageGenPrompt },
-            })),
-            ...(endingIgNode ? [endingIgNode] : []),
-            ...normalizedClips.map((clip, i) => ({
-                type: 'videoGen',
-                position: { x: xVideoGen, y: 60 + i * rowGap },
-                data: {
-                    prompt: clip.videoGenPrompt,
-                    segmentLabel: clip.segmentLabel,
-                    clipDurationSec: FLOW_VIDEO_CLIP_SECONDS,
-                },
-            })),
-            {
-                type: 'videoPreview',
-                position: { x: xPreview, y: 90 + Math.floor((Math.max(1, clipCount) - 1) * rowGap * 0.5) },
-            },
-        ];
-
-        /** Node index đầu tiên của cột imageGen cảnh (sau start + các imageInput). */
-        const imageGenStart = 1 + imageInputCount;
-        const extraEndingIg = endingIgNode ? 1 : 0;
-        const videoGenStart = imageGenStart + clipCount + extraEndingIg;
-        const previewIndex = videoGenStart + clipCount;
-        const edgesOut = [];
-
-        for (let j = 1; j <= imageInputCount; j += 1) {
-            edgesOut.push({ from: 0, to: j });
-        }
-        for (let i = 0; i < clipCount; i += 1) {
-            const sceneImageGenIdx = imageGenStart + i;
-            const videoGenIdx = videoGenStart + i;
-            edgesOut.push({ from: 0, to: sceneImageGenIdx });
-            for (let j = 1; j <= imageInputCount; j += 1) {
-                edgesOut.push({ from: j, to: sceneImageGenIdx });
-            }
-            /* Ảnh cảnh i → ĐẦU video i; ảnh cảnh i+1 → CUỐI video i (nối tiếp). */
-            edgesOut.push({ from: sceneImageGenIdx, to: videoGenIdx, targetHandle: 'in-start' });
-            if (i < clipCount - 1) {
-                const nextSceneIg = imageGenStart + i + 1;
-                edgesOut.push({ from: nextSceneIg, to: videoGenIdx, targetHandle: 'in-end' });
-            } else if (endingIgNode) {
-                const endIgIdx = imageGenStart + clipCount;
-                edgesOut.push({ from: endIgIdx, to: videoGenIdx, targetHandle: 'in-end' });
-            }
-            edgesOut.push({ from: videoGenIdx, to: previewIndex });
-        }
-        if (endingIgNode) {
-            const endIgIdx = imageGenStart + clipCount;
-            edgesOut.push({ from: 0, to: endIgIdx });
-            for (let j = 1; j <= imageInputCount; j += 1) {
-                edgesOut.push({ from: j, to: endIgIdx });
-            }
-        }
-
-        const graph = {
-            scriptSummary,
-            nodes: nodesOut,
-            edges: edgesOut,
-        };
         applyAiFlowGraph(graph);
-        const summary = scriptSummary || 'Đã thêm các node và cạnh từ kịch bản.';
+        const summary = graph?.scriptSummary || 'Đã thêm các node và cạnh từ kịch bản.';
         await notify.alert({ title: 'Đã tạo flow', message: summary, variant: 'success' });
     } catch (e) {
         aiFlowError.value = e?.message || String(e);
@@ -2073,6 +1933,15 @@ watchDebounced(
     { deep: true, debounce: 1000, maxWait: 12000 }
 );
 
+watchDebounced(
+    workflowDefaults,
+    () => {
+        if (!isLoaded.value || !currentProjectId.value || isHydratingFlow.value) return;
+        scheduleAutoSave();
+    },
+    { deep: true, debounce: 800, maxWait: 4000 }
+);
+
 watch(() => props.openProjectManagerKey, () => {
     isProjectManagerPageOpen.value = true;
 });
@@ -2085,7 +1954,6 @@ watch(() => props.openProjectManagerKey, () => {
                 <div class="sidebar-header">
                     <div class="sidebar-title-wrap">
                         <p class="sidebar-title">Workflow Tools</p>
-                        <span class="sidebar-subtitle">Build, edit, render</span>
                     </div>
                     <div class="add-menu-container">
                         <button @click.stop="isAddMenuOpen = !isAddMenuOpen" class="btn btn-primary">
@@ -2176,13 +2044,14 @@ watch(() => props.openProjectManagerKey, () => {
                             <Download :size="18" />
                             <span class="btn-text">Export</span>
                         </button>
-                        <button @click="clearAllResults" class="btn-icon btn-zinc" title="Clear All Results">
-                            <Eraser :size="18" />
-                            <span class="btn-text">Clear Results</span>
-                        </button>
-                        <button @click="clearFlow" class="btn-icon btn-red" title="Clear Flow">
-                            <Trash2 :size="18" />
-                            <span class="btn-text">Clear Flow</span>
+                        <button
+                            type="button"
+                            class="btn-icon btn-zinc"
+                            title="Cài đặt workflow"
+                            @click="isWorkflowSettingsOpen = true"
+                        >
+                            <Settings :size="18" />
+                            <span class="btn-text">Cài đặt</span>
                         </button>
                         <button type="button" class="btn-icon btn-zinc"
                             :class="{ 'btn-history-active': historyPanelOpen }" title="Show or hide edit history"
@@ -2292,10 +2161,29 @@ watch(() => props.openProjectManagerKey, () => {
                     </foreignObject>
                 </template>
 
-                <AiFlowPromptPanel :busy="aiFlowBusy" :error="aiFlowError" :chat-turn="runAiFlowPromptChatTurn"
-                    @build="runGeminiBuildNodes" />
+                <AiFlowPromptPanel
+                    ref="aiFlowPromptPanelRef"
+                    :busy="aiFlowBusy"
+                    :error="aiFlowError"
+                    :chat-turn="runAiFlowPromptChatTurn"
+                    @build="runGeminiBuildNodes"
+                    @open-structure-settings="isAiFlowStructureSettingsOpen = true"
+                />
             </VueFlow>
         </div>
+
+        <FlowWorkflowSettingsPopup
+            v-model:open="isWorkflowSettingsOpen"
+            v-model:defaults="workflowDefaults"
+            :video-model-options="workflowVideoModelOptions"
+            @clear-results="clearAllResults"
+            @clear-flow="clearFlow"
+        />
+
+        <AiFlowStructureSettingsPopup
+            v-model:open="isAiFlowStructureSettingsOpen"
+            @saved="aiFlowPromptPanelRef?.reloadStructures?.()"
+        />
 
         <ProjectModal :is-open="isProjectModalOpen" :current-project-id="currentProjectId"
             @close="isProjectModalOpen = false" @load="handleProjectLoad" @create="handleProjectCreate"

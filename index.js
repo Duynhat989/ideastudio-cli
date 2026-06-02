@@ -1,284 +1,243 @@
-// main.js
-const { app, BrowserWindow, Menu, ipcMain, shell, dialog } = require('electron');
 const fs = require('fs');
 const path = require('path');
+const express = require('express');
+const { spawn } = require('child_process');
 const { pathToFileURL } = require('url');
-const { projectPath, isDev } = require('./config');
-const BrowserProfileManager = require('./src/modules/browser.module');
+const { projectPath } = require('./config');
 const API_HOST = require('./src/routes');
-const express = require('express')
+const BrowserProfileManager = require('./src/modules/browser.module');
 
 require('dotenv').config();
+
+const APP_VERSION = require('./package.json').version || '0.0.0';
+const metadataDir = path.join(projectPath, 'metadata');
+const bundledMetadataDir = path.join(__dirname, 'metadata');
+
+const browserProfileManager = new BrowserProfileManager({ metadataDir });
+let httpServer = null;
 
 const defaultVersionData = {
     app: {
         name: 'IdeaStudio',
-        internalName: 'ideastudio-desktop',
-        description: 'Desktop application for IdeaStudio',
+        internalName: 'ideastudio-cli',
+        description: 'Local web application for IdeaStudio',
         home: 'https://idea2vid.com',
-        version: app.getVersion ? app.getVersion() : '0.0.0'
-    }
+        version: APP_VERSION,
+    },
 };
 
-const metadataDir = path.join(projectPath, 'metadata');
-const bundledMetadataCandidates = [
-    path.join(process.resourcesPath || '', 'metadata'),
-    path.join(__dirname, 'metadata'),
-].filter(Boolean);
-const bundledMetadataDir = bundledMetadataCandidates.find((p) => fs.existsSync(p));
-
-fs.mkdirSync(metadataDir, { recursive: true });
-
-// Migrate legacy install-dir metadata into user data dir on first packaged runs.
-const legacyMetadataDir = path.join(path.dirname(process.execPath), 'metadata');
-if (!isDev && fs.existsSync(legacyMetadataDir)) {
-    try {
-        fs.cpSync(legacyMetadataDir, metadataDir, { recursive: true, force: false, errorOnExist: false });
-    } catch (_) {
-        // Ignore migrate failures; app can still run with current files.
-    }
-}
-
-// Seed user data metadata from bundled defaults when available.
-if (bundledMetadataDir) {
-    try {
-        fs.cpSync(bundledMetadataDir, metadataDir, { recursive: true, force: false, errorOnExist: false });
-    } catch (_) {
-        // Ignore copy errors for existing files.
-    }
-}
-
-const versionFilePath = path.join(metadataDir, 'version.json');
-if (!fs.existsSync(versionFilePath)) {
-    fs.writeFileSync(versionFilePath, JSON.stringify(defaultVersionData, null, 2), 'utf-8');
-}
-
-const metadataConfigPath = path.join(metadataDir, 'config.json');
-if (!fs.existsSync(metadataConfigPath)) {
-    fs.writeFileSync(metadataConfigPath, JSON.stringify({ updatedAt: new Date().toISOString() }, null, 2), 'utf-8');
-}
-
-const metadataIndexPath = path.join(metadataDir, 'index.html');
-if (!fs.existsSync(metadataIndexPath)) {
-    const bundledMetadataIndexPath = path.join(__dirname, 'metadata', 'index.html');
-    if (fs.existsSync(bundledMetadataIndexPath)) {
-        fs.copyFileSync(bundledMetadataIndexPath, metadataIndexPath);
-    } else {
-        fs.writeFileSync(metadataIndexPath, '<!doctype html><html><head><meta charset="utf-8"><title>IdeaStudio Metadata</title></head><body>Metadata ready.</body></html>', 'utf-8');
-    }
-}
-
-let versionData = defaultVersionData;
-try {
-    versionData = JSON.parse(fs.readFileSync(versionFilePath, 'utf-8'));
-} catch (err) {
-    console.error('Cannot read metadata/version.json, using default.', err);
-}
-
-API_HOST.use('/', express.static(metadataDir))
-app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') app.quit();
-});
-
-ipcMain.on('window-run-application', async (event, data) => {
-    try {
-        const vector = JSON.parse(data);
-        console.log('Dữ liệu nhận:', vector);
-    } catch (err) {
-        console.error('Lỗi parse JSON:', err);
-    }
-});
-let mainWindow
-let browserProfileManager
-const openDeveloperTools = () => {
-    mainWindow.webContents.openDevTools()
-}
-
-const isVueJs = true
-let withFrame = false
-function createWindow() {
-    // Update metadata
-    API_HOST.listen(27123, '127.0.0.1', () => {
-        console.log('Command server running at 127.0.0.1:27123')
-    })
-
-    mainWindow = new BrowserWindow({
-        width: 700,
-        height: 500,
-        icon: path.join(__dirname, 'src/assets/logo_ico.ico'),
-        webPreferences: {
-            preload: path.join(__dirname, 'preload.js'),
-            contextIsolation: true,
-            nodeIntegration: false,
-            enableRemoteModule: false,
-            webSecurity: false
-        },
-    });
-    if (!isVueJs) {
-        mainWindow.loadFile(path.join(__dirname, 'view', 'dist', 'index.html'));
-    } else {
-        // Khi chạy dev
-        mainWindow.loadURL(`http://localhost:5173/`);
-        // setTimeout(() => {
-        //     mainWindow.webContents.openDevTools()
-        // }, 1000)
-    }
-
-    function registerService(prefix, fn) {
-        if (typeof fn !== 'function') {
-            throw new Error(`Service phải là một hàm`);
+function ensureMetadata() {
+    fs.mkdirSync(metadataDir, { recursive: true });
+    if (fs.existsSync(bundledMetadataDir)) {
+        try {
+            fs.cpSync(bundledMetadataDir, metadataDir, { recursive: true, force: false, errorOnExist: false });
+        } catch (_) {
+            // Ignore copy errors for existing files.
         }
-
-        const channel = prefix; // dùng chính prefix làm channel
-        console.log(`Register IPC: ${channel}`);
-
-        ipcMain.handle(channel, async (event, ...args) => {
-            try {
-                const result = await fn(...args);
-                return result;
-            } catch (error) {
-                console.error(`Lỗi IPC ${channel}:`, error);
-                return { success: false, message: error.message };
-            }
-        });
     }
 
+    const versionFilePath = path.join(metadataDir, 'version.json');
+    if (!fs.existsSync(versionFilePath)) {
+        fs.writeFileSync(versionFilePath, JSON.stringify(defaultVersionData, null, 2), 'utf-8');
+    }
+
+    const metadataConfigPath = path.join(metadataDir, 'config.json');
+    if (!fs.existsSync(metadataConfigPath)) {
+        fs.writeFileSync(metadataConfigPath, JSON.stringify({ updatedAt: new Date().toISOString() }, null, 2), 'utf-8');
+    }
+
+    const metadataIndexPath = path.join(metadataDir, 'index.html');
+    if (!fs.existsSync(metadataIndexPath)) {
+        const bundledMetadataIndexPath = path.join(__dirname, 'metadata', 'index.html');
+        if (fs.existsSync(bundledMetadataIndexPath)) {
+            fs.copyFileSync(bundledMetadataIndexPath, metadataIndexPath);
+        } else {
+            fs.writeFileSync(metadataIndexPath, '<!doctype html><html><head><meta charset="utf-8"><title>IdeaStudio Metadata</title></head><body>Metadata ready.</body></html>', 'utf-8');
+        }
+    }
 }
 
-function registerBrowserProfileIpc() {
-    ipcMain.handle('profiles:list', async () => {
+function openExternal(target) {
+    return new Promise((resolve) => {
+        const url = String(target || '').trim();
+        if (!url) return resolve({ success: false, message: 'Invalid URL' });
+
+        let cmd = '';
+        let args = [];
+        if (process.platform === 'win32') {
+            cmd = 'cmd';
+            args = ['/c', 'start', '', url];
+        } else if (process.platform === 'darwin') {
+            cmd = 'open';
+            args = [url];
+        } else {
+            cmd = 'xdg-open';
+            args = [url];
+        }
+        const child = spawn(cmd, args, { detached: true, stdio: 'ignore' });
+        child.on('error', (err) => resolve({ success: false, message: err.message }));
+        child.unref();
+        resolve({ success: true });
+    });
+}
+
+function openDirectory(fileOrDirPath) {
+    return new Promise((resolve) => {
+        try {
+            if (!fileOrDirPath || typeof fileOrDirPath !== 'string') {
+                return resolve({ success: false, message: 'Thiếu đường dẫn' });
+            }
+            let dir = fileOrDirPath;
+            if (fs.existsSync(fileOrDirPath)) {
+                const st = fs.statSync(fileOrDirPath);
+                if (st.isFile()) dir = path.dirname(fileOrDirPath);
+            } else {
+                dir = path.dirname(fileOrDirPath);
+            }
+
+            let cmd = '';
+            let args = [];
+            if (process.platform === 'win32') {
+                cmd = 'explorer';
+                args = [dir];
+            } else if (process.platform === 'darwin') {
+                cmd = 'open';
+                args = [dir];
+            } else {
+                cmd = 'xdg-open';
+                args = [dir];
+            }
+            const child = spawn(cmd, args, { detached: true, stdio: 'ignore' });
+            child.on('error', (err) => resolve({ success: false, message: err.message }));
+            child.unref();
+            return resolve({ success: true });
+        } catch (e) {
+            return resolve({ success: false, message: e.message });
+        }
+    });
+}
+
+function runCommandCapture(command, args) {
+    return new Promise((resolve) => {
+        const child = spawn(command, args, { windowsHide: true });
+        let stdout = '';
+        let stderr = '';
+        child.stdout.on('data', (chunk) => { stdout += String(chunk || ''); });
+        child.stderr.on('data', (chunk) => { stderr += String(chunk || ''); });
+        child.on('error', (err) => resolve({ success: false, message: err.message }));
+        child.on('close', (code) => {
+            resolve({
+                success: code === 0,
+                stdout: stdout.trim(),
+                stderr: stderr.trim(),
+                code,
+            });
+        });
+    });
+}
+
+async function pickSaveVideoPath(defaultName = '') {
+    const safeDefaultName = String(defaultName || `render-${Date.now()}.mp4`).replace(/"/g, '');
+
+    if (process.platform === 'win32') {
+        const psScript = [
+            'Add-Type -AssemblyName System.Windows.Forms',
+            '$dialog = New-Object System.Windows.Forms.SaveFileDialog',
+            '$dialog.Title = "Select output video path"',
+            '$dialog.Filter = "MP4 Video (*.mp4)|*.mp4|All Files (*.*)|*.*"',
+            '$dialog.FileName = "' + safeDefaultName + '"',
+            '$result = $dialog.ShowDialog()',
+            'if ($result -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $dialog.FileName }',
+        ].join('; ');
+        const r = await runCommandCapture('powershell', ['-NoProfile', '-STA', '-Command', psScript]);
+        if (!r.success) return { success: false, message: r.stderr || 'Cannot open save dialog' };
+        if (!r.stdout) return { success: false, canceled: true };
+        return { success: true, filePath: r.stdout };
+    }
+
+    return { success: false, message: 'Save file dialog is only implemented on Windows in this build.' };
+}
+
+function registerRuntimeRoutes() {
+    API_HOST.use('/metadata', express.static(metadataDir));
+
+    API_HOST.get('/api/system/version', (_req, res) => {
+        res.status(200).json({ success: true, data: defaultVersionData });
+    });
+
+    API_HOST.post('/api/system/open-external', async (req, res) => {
+        const result = await openExternal(req.body?.url);
+        if (!result.success) return res.status(400).json(result);
+        return res.status(200).json(result);
+    });
+
+    API_HOST.post('/api/system/open-directory', async (req, res) => {
+        const result = await openDirectory(req.body?.path);
+        if (!result.success) return res.status(400).json(result);
+        return res.status(200).json(result);
+    });
+
+    API_HOST.post('/api/system/save-video-path', async (req, res) => {
+        const result = await pickSaveVideoPath(req.body?.defaultName);
+        if (result.canceled) return res.status(200).json(result);
+        if (!result.success) return res.status(400).json(result);
+        return res.status(200).json(result);
+    });
+
+    API_HOST.get('/api/profiles', async (_req, res) => {
         try {
             const profiles = await browserProfileManager.listProfiles();
-            return { success: true, data: profiles };
+            res.status(200).json({ success: true, data: profiles });
         } catch (error) {
-            return { success: false, message: error.message };
+            res.status(500).json({ success: false, message: error.message });
         }
     });
 
-    ipcMain.handle('profiles:create', async (_event, payload = {}) => {
+    API_HOST.post('/api/profiles', async (req, res) => {
         try {
-            const profile = await browserProfileManager.createProfile(payload);
-            return { success: true, data: profile };
+            const profile = await browserProfileManager.createProfile(req.body || {});
+            res.status(200).json({ success: true, data: profile });
         } catch (error) {
-            return { success: false, message: error.message };
+            res.status(500).json({ success: false, message: error.message });
         }
     });
 
-    ipcMain.handle('profiles:update', async (_event, payload = {}) => {
+    API_HOST.put('/api/profiles/:id', async (req, res) => {
         try {
-            const { id, ...rest } = payload || {};
-            if (!id) return { success: false, message: 'Missing profile id' };
-            const profile = await browserProfileManager.updateProfile(id, rest);
-            return { success: true, data: profile };
+            const profile = await browserProfileManager.updateProfile(req.params.id, req.body || {});
+            res.status(200).json({ success: true, data: profile });
         } catch (error) {
-            return { success: false, message: error.message };
+            res.status(500).json({ success: false, message: error.message });
         }
     });
 
-    ipcMain.handle('profiles:delete', async (_event, payload = {}) => {
+    API_HOST.delete('/api/profiles/:id', async (req, res) => {
         try {
-            const id = payload?.id;
-            if (!id) return { success: false, message: 'Missing profile id' };
-            return await browserProfileManager.deleteProfile(id);
+            const result = await browserProfileManager.deleteProfile(req.params.id);
+            res.status(200).json(result);
         } catch (error) {
-            return { success: false, message: error.message };
+            res.status(500).json({ success: false, message: error.message });
         }
     });
 
-    ipcMain.handle('profiles:open', async (_event, payload = {}) => {
+    API_HOST.post('/api/profiles/:id/open', async (req, res) => {
         try {
-            const id = payload?.id;
-            if (!id) return { success: false, message: 'Missing profile id' };
-            return await browserProfileManager.openProfile(id);
+            const result = await browserProfileManager.openProfile(req.params.id);
+            res.status(200).json(result);
         } catch (error) {
-            return { success: false, message: error.message };
+            res.status(500).json({ success: false, message: error.message });
         }
     });
 
-    ipcMain.handle('profiles:close', async (_event, payload = {}) => {
+    API_HOST.post('/api/profiles/:id/close', async (req, res) => {
         try {
-            const id = payload?.id;
-            if (!id) return { success: false, message: 'Missing profile id' };
-            return await browserProfileManager.closeProfile(id);
+            const result = await browserProfileManager.closeProfile(req.params.id);
+            res.status(200).json(result);
         } catch (error) {
-            return { success: false, message: error.message };
+            res.status(500).json({ success: false, message: error.message });
         }
     });
 }
-const sendToVueJs = async (objectData) => {
-    mainWindow.webContents.send('server-status-change', objectData);
-}
-ipcMain.on('window-fullscreen', (event, payload) => {
-
-    if (mainWindow) {
-        mainWindow.frame = true; // 👈 hiện header
-        mainWindow.maximize(); // 👈 full màn nhưng vẫn có taskbar
-        mainWindow.show();
-    }
-});
-app.whenReady().then(() => {
-    Menu.setApplicationMenu(null);
-    browserProfileManager = new BrowserProfileManager({ metadataDir });
-    registerBrowserProfileIpc();
-    createWindow();
-    app.on('activate', () => {
-        if (BrowserWindow.getAllWindows().length === 0) createWindow();
-    });
-    setTimeout(() => {
-        sendToVueJs({ success: true, type: 'version', data: versionData });
-    }, 3000);
-});
-
-app.on('before-quit', async () => {
-    if (browserProfileManager) {
-        await browserProfileManager.closeAll();
-    }
-});
-
-ipcMain.handle('dialog:save-video-path', async (_event, payload = {}) => {
-    const defaultName = payload.defaultName || `render-${Date.now()}.mp4`;
-    const result = await dialog.showSaveDialog({
-        title: 'Select output video path',
-        defaultPath: path.join(projectPath, 'metadata', 'renders', defaultName),
-        filters: [{ name: 'MP4 Video', extensions: ['mp4'] }]
-    });
-    if (result.canceled || !result.filePath) return { success: false, canceled: true };
-    return { success: true, filePath: result.filePath };
-});
-
-/** Mở thư mục chứa file (hoặc đường dẫn thư mục) trong Explorer / Finder — không mở file bằng app mặc định. */
-ipcMain.handle('shell:open-directory', async (_event, fileOrDirPath) => {
-    try {
-        if (!fileOrDirPath || typeof fileOrDirPath !== 'string') {
-            return { success: false, message: 'Thiếu đường dẫn' };
-        }
-        let dir = fileOrDirPath;
-        if (fs.existsSync(fileOrDirPath)) {
-            const st = fs.statSync(fileOrDirPath);
-            if (st.isFile()) dir = path.dirname(fileOrDirPath);
-        } else {
-            dir = path.dirname(fileOrDirPath);
-        }
-        const errMsg = await shell.openPath(dir);
-        if (errMsg) return { success: false, message: errMsg };
-        return { success: true };
-    } catch (e) {
-        return { success: false, message: e.message };
-    }
-});
-
-/** Mở URL trong trình duyệt mặc định (Nano AI sign-in, v.v.). */
-ipcMain.handle('shell:open-external', async (_event, url) => {
-    try {
-        if (!url || typeof url !== 'string') {
-            return { success: false, message: 'Invalid URL' };
-        }
-        await shell.openExternal(url);
-        return { success: true };
-    } catch (e) {
-        return { success: false, message: e.message };
-    }
-});
 
 const LOOPFLOW_IMAGE_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp']);
 const LOOPFLOW_VIDEO_EXT = new Set(['.mp4', '.webm', '.mov', '.mkv', '.avi']);
@@ -343,27 +302,63 @@ async function loopflowListMedia(rootPath, options = {}) {
     return items;
 }
 
-ipcMain.handle('dialog:open-directory', async () => {
-    const win = BrowserWindow.getFocusedWindow() || mainWindow;
-    if (!win) return { success: false, message: 'Chưa có cửa sổ' };
-    const r = await dialog.showOpenDialog(win, {
-        title: 'Chọn thư mục ảnh / video',
-        properties: ['openDirectory'],
-    });
-    if (r.canceled || !r.filePaths?.length) return { success: false, canceled: true };
-    return { success: true, path: r.filePaths[0] };
-});
-
-ipcMain.handle('loopflow:list-media', async (_event, payload = {}) => {
+function registerLoopflowRoute() {
+    API_HOST.post('/api/loopflow/list-media', async (req, res) => {
+        const payload = req.body || {};
     try {
         const rootPath = payload.rootPath;
         if (!rootPath || typeof rootPath !== 'string') {
-            return { success: false, message: 'Thiếu đường dẫn thư mục' };
+                return res.status(400).json({ success: false, message: 'Thiếu đường dẫn thư mục' });
         }
-        if (!fs.existsSync(rootPath)) return { success: false, message: 'Thư mục không tồn tại' };
+            if (!fs.existsSync(rootPath)) return res.status(404).json({ success: false, message: 'Thư mục không tồn tại' });
         const files = await loopflowListMedia(rootPath, payload);
-        return { success: true, files };
+            return res.status(200).json({ success: true, files });
     } catch (e) {
-        return { success: false, message: e.message || String(e) };
+            return res.status(500).json({ success: false, message: e.message || String(e) });
     }
-});
+    });
+}
+
+function registerFrontendRoutes() {
+    const frontendDistPath = path.join(__dirname, 'dist');
+    if (fs.existsSync(path.join(frontendDistPath, 'index.html'))) {
+        API_HOST.use(express.static(frontendDistPath));
+        API_HOST.get('*', (req, res, next) => {
+            if (req.path.startsWith('/api/') || req.path.startsWith('/renders/') || req.path.startsWith('/metadata/')) {
+                return next();
+            }
+            return res.sendFile(path.join(frontendDistPath, 'index.html'));
+        });
+    } else {
+        API_HOST.get('/', (_req, res) => {
+            res.status(200).send('IdeaStudio server is running. Build frontend in view/dist to serve UI.');
+        });
+    }
+}
+
+async function startServer({ port = 27123, host = '127.0.0.1' } = {}) {
+    ensureMetadata();
+    registerRuntimeRoutes();
+    registerLoopflowRoute();
+    registerFrontendRoutes();
+
+    return new Promise((resolve, reject) => {
+        httpServer = API_HOST.listen(port, host, () => {
+            resolve({ server: httpServer, port, host });
+        });
+        httpServer.on('error', reject);
+    });
+}
+
+async function stopServer() {
+    await browserProfileManager.closeAll();
+    if (!httpServer) return;
+    await new Promise((resolve) => httpServer.close(resolve));
+    httpServer = null;
+}
+
+module.exports = {
+    startServer,
+    stopServer,
+    metadataDir,
+};

@@ -23,7 +23,8 @@ const veoAccounts = ref([
     id: 1,
     name: '',
     token: '',
-    cookie: ''
+    cookie: '',
+    videoTier: 'ultra',
   }
 ])
 
@@ -36,7 +37,8 @@ const addVeoAccount = () => {
     id: nextId,
     name: '',
     token: '',
-    cookie: ''
+    cookie: '',
+    videoTier: 'ultra',
   })
 }
 
@@ -56,7 +58,7 @@ const saveConfiguration = async () => {
     },
     veoAccounts: veoAccounts.value,
     nano: {
-      apiKey: nanoApiKey.value
+      apiKey: nanoApiKey.value,
     },
     updatedAt: new Date().toISOString()
   }
@@ -71,7 +73,8 @@ const saveConfiguration = async () => {
     videoAccessToken: veoAccounts.value?.[0]?.token || '',
     videoCookie: veoAccounts.value?.[0]?.cookie || '',
     geminiApiKey: geminiApiKey.value,
-    geminiModel: geminiModel.value
+    geminiModel: geminiModel.value,
+    videoTier: veoAccounts.value?.[0]?.videoTier === 'pro' ? 'pro' : 'ultra',
   }))
   await notify.alert({
     title: 'Đã lưu cấu hình',
@@ -93,13 +96,15 @@ onMounted(() => {
     geminiApiKey.value = saved?.gemini?.apiKey || ''
     geminiModel.value = saved?.gemini?.model || 'gemini-3-flash-preview'
     nanoApiKey.value = saved?.nano?.apiKey || ''
+    const legacyTier = saved?.nano?.videoTier === 'pro' ? 'pro' : 'ultra'
 
     if (Array.isArray(saved?.veoAccounts) && saved.veoAccounts.length) {
       veoAccounts.value = saved.veoAccounts.map((item, index) => ({
         id: Number(item?.id) || index + 1,
         name: item?.name || '',
         token: item?.token || '',
-        cookie: item?.cookie || ''
+        cookie: item?.cookie || '',
+        videoTier: item?.videoTier === 'pro' ? 'pro' : legacyTier,
       }))
     }
   } catch (error) {
@@ -161,7 +166,7 @@ onMounted(() => {
         <div class="section-head">
           <div>
             <h3>Thiet lap tai khoan Veo</h3>
-            <p class="section-note">Co the them nhieu tai khoan, moi tai khoan gom name, token va cookie.</p>
+            <p class="section-note">Moi tai khoan: name, token, cookie labs.google va video tier (Ultra/Pro).</p>
           </div>
           <button type="button" class="ghost-btn" @click="addVeoAccount">Them tai khoan</button>
         </div>
@@ -203,13 +208,20 @@ onMounted(() => {
               rows="3"
               placeholder="Nhap cookie"
             />
+
+            <label :for="`veo-tier-${account.id}`">Video tier</label>
+            <select :id="`veo-tier-${account.id}`" v-model="account.videoTier">
+              <option value="ultra">Ultra — modelsV3</option>
+              <option value="pro">Pro — modelsV3Pro</option>
+            </select>
+            <p class="section-note">Mac dinh cho node Sinh video khi dung tai khoan nay (tai khoan 1 = mac dinh he thong).</p>
           </article>
         </div>
       </section>
 
       <section class="setup-section">
         <h3>API KEY NANO</h3>
-        <p class="section-note">Su dung cho cac service Nano trong he thong.</p>
+        <p class="section-note">Su dung cho cac service Nano trong he thong (Google Flow API v3).</p>
 
         <label for="nano-api-key">Nano API Key</label>
         <div class="secret-input-wrap">

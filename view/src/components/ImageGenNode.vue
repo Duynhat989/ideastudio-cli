@@ -5,6 +5,7 @@ import { shouldUseVideoPreview } from '@/utils/flowMedia.js';
 import { Handle, Position } from '@vue-flow/core';
 import { Wand2, Loader2, AlertCircle, CheckCircle2, XCircle, Download, Trash2 } from 'lucide-vue-next';
 import FlowNodeShell from '@/components/FlowNodeShell.vue';
+import { IMAGE_MODELS } from '@/services/flowApiV3.js';
 
 const props = defineProps({
   id: String,
@@ -123,8 +124,7 @@ const copyError = async () => {
             :value="data.imageModel"
             @change="data.onChange?.({ imageModel: $event.target.value })"
           >
-            <option value="GEM_PIX_2">Gemini Pix 2</option>
-            <option value="IMAGEN_3">Imagen 3</option>
+            <option v-for="m in IMAGE_MODELS" :key="m.value" :value="m.value">{{ m.label }}</option>
           </select>
         </div>
         <div v-if="data.inputs?.length">
