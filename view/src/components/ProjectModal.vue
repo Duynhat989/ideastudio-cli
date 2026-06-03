@@ -122,7 +122,6 @@ const vFocus = {
               <select v-model="newProjectAspect" class="main-input ratio-select">
                 <option value="portrait">9:16 portrait</option>
                 <option value="landscape">16:9 landscape</option>
-                <option value="square">1:1 square</option>
               </select>
               <button type="button" @click="handleCreate" class="create-btn" :disabled="!newProjectName.trim()">
                 <Plus :size="18" />

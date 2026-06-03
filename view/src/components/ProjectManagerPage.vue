@@ -8,13 +8,16 @@ import {
   Check,
   X,
   Search,
-  LayoutGrid,
   Loader2,
   Sparkles,
   Clock,
+  Film,
+  Smartphone,
+  Monitor,
 } from 'lucide-vue-next';
 import { projectService } from '@/services/project.service';
 import { notify } from '@/composables/useNotify.js';
+import demoThumb from '@/assets/demo.png';
 
 const props = defineProps({
   currentProjectId: String,
@@ -34,9 +37,20 @@ const editingName = ref('');
 const createModalOpen = ref(false);
 
 const aspectOptions = [
-  { value: 'portrait', label: '9:16', hint: 'Dọc' },
-  { value: 'landscape', label: '16:9', hint: 'Ngang' },
-  { value: 'square', label: '1:1', hint: 'Vuông' },
+  {
+    value: 'portrait',
+    label: '9:16',
+    hint: 'Dọc',
+    desc: 'TikTok, Reels, Shorts',
+    Icon: Smartphone,
+  },
+  {
+    value: 'landscape',
+    label: '16:9',
+    hint: 'Ngang',
+    desc: 'YouTube, TV, web',
+    Icon: Monitor,
+  },
 ];
 
 const aspectLabel = (preset) => {
@@ -142,20 +156,32 @@ onMounted(loadProjects);
 
 <template>
   <section class="page-wrap">
-    <div class="pm-bg" aria-hidden="true" />
+    <div class="pm-bg" aria-hidden="true">
+      <div class="pm-bg-orb pm-bg-orb--1" />
+      <div class="pm-bg-orb pm-bg-orb--2" />
+      <div class="pm-bg-grid" />
+    </div>
+
     <div class="pm-inner">
       <header class="pm-hero">
-        <div class="pm-hero-text">
-          <p class="pm-eyebrow">
-            <Sparkles :size="14" class="pm-eyebrow-ic" aria-hidden="true" />
-            Workflow
-          </p>
-          <h2 class="pm-title">Project Manager</h2>
-          <p class="pm-sub">Chọn một project để mở canvas kéo thả, hoặc tạo mới bên dưới.</p>
+        <div class="pm-hero-left">
+          <div class="pm-hero-icon">
+            <Film :size="22" aria-hidden="true" />
+          </div>
+          <div class="pm-hero-text">
+            <p class="pm-eyebrow">
+              <Sparkles :size="13" class="pm-eyebrow-ic" aria-hidden="true" />
+              Flow AI
+            </p>
+            <h2 class="pm-title">Project Manager</h2>
+            <p class="pm-sub">Quản lý workflow canvas — chọn project để tiếp tục hoặc tạo mới.</p>
+          </div>
         </div>
-        <div class="pm-hero-badge" :class="{ dim: loading }">
-          <FolderOpen :size="22" class="pm-badge-ic" aria-hidden="true" />
-          <span>{{ projectCountLabel }}</span>
+        <div class="pm-hero-stats">
+          <div class="pm-stat" :class="{ dim: loading }">
+            <FolderOpen :size="18" aria-hidden="true" />
+            <span>{{ projectCountLabel }}</span>
+          </div>
         </div>
       </header>
 
@@ -175,50 +201,50 @@ onMounted(loadProjects);
           <option value="name">Tên A–Z</option>
         </select>
         <button type="button" class="pm-create-btn" @click="openCreateModal">
-          <Plus :size="16" />
+          <Plus :size="17" stroke-width="2.5" />
           <span>Tạo project</span>
         </button>
       </div>
 
       <main class="pm-main">
-        <div class="pm-main-head">
-          <h3 class="pm-main-title">Danh sách</h3>
-          <p v-if="!loading && filteredProjects.length" class="pm-main-hint">Nhấn thẻ để mở project</p>
+        <div v-if="loading" class="pm-state pm-state--load">
+          <Loader2 :size="32" class="pm-spin" aria-hidden="true" />
+          <p>Đang tải project…</p>
         </div>
 
-        <div class="pm-list-wrap">
-          <div v-if="loading" class="pm-state pm-state--load">
-            <Loader2 :size="28" class="pm-spin" aria-hidden="true" />
-            <p>Đang tải project…</p>
-          </div>
-          <div v-else-if="filteredProjects.length === 0" class="pm-state pm-state--empty">
-            <div class="pm-empty-icon">
-              <FolderOpen :size="36" stroke-width="1.5" />
+        <div v-else-if="filteredProjects.length === 0" class="pm-state pm-state--empty">
+          <div class="pm-empty-visual">
+            <div class="pm-empty-ring">
+              <FolderOpen :size="40" stroke-width="1.25" />
             </div>
-            <p class="pm-empty-title">Chưa có project</p>
-            <p class="pm-empty-text">Bấm <strong>Tạo project</strong> để bắt đầu.</p>
           </div>
-          <div v-else class="pm-grid">
-            <article
-              v-for="project in filteredProjects"
-              :key="project.id"
-              class="pm-card"
-              :class="{ 'pm-card--active': currentProjectId === project.id }"
-            >
-              <div class="pm-card-accent" aria-hidden="true" />
-              <div class="pm-card-inner" @click="emit('load', project.id)">
-                <div class="pm-card-top">
-                  <span class="pm-ratio">{{ aspectLabel(project.aspectPreset) }}</span>
-                  <div v-if="editingId !== project.id" class="pm-card-actions">
-                    <button type="button" class="pm-icon" title="Đổi tên" @click.stop="startRename(project)">
-                      <Edit2 :size="15" />
-                    </button>
-                    <button type="button" class="pm-icon pm-icon--danger" title="Xóa" @click.stop="removeProject(project.id)">
-                      <Trash2 :size="15" />
-                    </button>
-                  </div>
-                </div>
+          <h3 class="pm-empty-title">Chưa có project nào</h3>
+          <p class="pm-empty-text">Tạo project đầu tiên để bắt đầu xây dựng workflow AI của bạn.</p>
+          <button type="button" class="pm-empty-cta" @click="openCreateModal">
+            <Plus :size="16" />
+            Tạo project mới
+          </button>
+        </div>
 
+        <div v-else class="pm-grid">
+          <article
+            v-for="project in filteredProjects"
+            :key="project.id"
+            class="pm-card"
+            :class="{ 'pm-card--active': currentProjectId === project.id }"
+          >
+            <button
+              type="button"
+              class="pm-card-open"
+              :aria-label="`Mở project ${project.name}`"
+              @click="emit('load', project.id)"
+            >
+              <div class="pm-card-media">
+                <img :src="demoThumb" alt="" class="pm-card-img" loading="lazy" decoding="async" />
+                <span class="pm-card-tag">Workflow</span>
+              </div>
+
+              <div class="pm-card-content">
                 <template v-if="editingId === project.id">
                   <div class="pm-rename" @click.stop>
                     <input
@@ -229,83 +255,120 @@ onMounted(loadProjects);
                     />
                     <div class="pm-rename-row">
                       <button type="button" class="pm-icon pm-icon--ok" @click="saveRename(project.id)">
-                        <Check :size="15" />
+                        <Check :size="14" />
                       </button>
                       <button type="button" class="pm-icon" @click="cancelRename">
-                        <X :size="15" />
+                        <X :size="14" />
                       </button>
                     </div>
                   </div>
                 </template>
                 <template v-else>
-                  <h3 class="pm-card-title">{{ project.name }}</h3>
+                  <div class="pm-card-head">
+                    <h3 class="pm-card-title">{{ project.name }}</h3>
+                    <span v-if="currentProjectId === project.id" class="pm-active-badge">Đang mở</span>
+                  </div>
                   <p v-if="project.description" class="pm-card-desc">{{ project.description }}</p>
                   <p v-else class="pm-card-desc pm-card-desc--muted">Chưa có mô tả</p>
                   <div class="pm-card-foot">
-                    <Clock :size="13" aria-hidden="true" />
-                    <time :datetime="project.updatedAt || project.createdAt">{{
-                      new Date(project.updatedAt || project.createdAt).toLocaleString('vi-VN')
-                    }}</time>
+                    <span class="pm-ratio-pill">{{ aspectLabel(project.aspectPreset) }}</span>
+                    <span class="pm-card-date">
+                      <Clock :size="12" aria-hidden="true" />
+                      <time :datetime="project.updatedAt || project.createdAt">{{
+                        new Date(project.updatedAt || project.createdAt).toLocaleString('vi-VN')
+                      }}</time>
+                    </span>
                   </div>
                 </template>
               </div>
-            </article>
-          </div>
+            </button>
+
+            <div v-if="editingId !== project.id" class="pm-card-actions">
+              <button type="button" class="pm-icon" title="Đổi tên" @click.stop="startRename(project)">
+                <Edit2 :size="14" />
+              </button>
+              <button type="button" class="pm-icon pm-icon--danger" title="Xóa" @click.stop="removeProject(project.id)">
+                <Trash2 :size="14" />
+              </button>
+            </div>
+          </article>
         </div>
       </main>
     </div>
 
     <Teleport to="body">
-      <div v-if="createModalOpen" class="pm-modal-overlay" @click.self="closeCreateModal">
-        <div class="pm-modal-card">
-          <div id="create-heading" class="pm-create-head">
-            <LayoutGrid :size="17" aria-hidden="true" />
-            <span>Tạo project</span>
-          </div>
-          <label class="pm-field">
-            <span class="pm-label">Tên project</span>
-            <input
-              v-model="newProjectName"
-              type="text"
-              class="pm-input"
-              placeholder="VD: Campaign Tết 2026"
-              @keyup.enter="createProject"
-            />
-          </label>
-          <label class="pm-field">
-            <span class="pm-label">Mô tả <span class="pm-optional">(tuỳ chọn)</span></span>
-            <textarea
-              v-model="newProjectDescription"
-              class="pm-textarea"
-              rows="3"
-              placeholder="Ghi chú ngắn cho team…"
-            />
-          </label>
-          <div class="pm-field">
-            <span class="pm-label">Tỷ lệ mặc định</span>
-            <div class="pm-chips" role="radiogroup" aria-label="Tỷ lệ">
-              <button
-                v-for="opt in aspectOptions"
-                :key="opt.value"
-                type="button"
-                class="pm-chip"
-                :class="{ 'pm-chip--on': newProjectAspect === opt.value }"
-                @click="newProjectAspect = opt.value"
-              >
-                <span class="pm-chip-label">{{ opt.label }}</span>
-                <span class="pm-chip-hint">{{ opt.hint }}</span>
+      <Transition name="pm-modal">
+        <div v-if="createModalOpen" class="pm-modal-overlay" @click.self="closeCreateModal">
+          <div class="pm-modal-card" role="dialog" aria-labelledby="create-heading">
+            <header class="pm-modal-header">
+              <div>
+                <p id="create-heading" class="pm-modal-eyebrow">Project mới</p>
+                <h3 class="pm-modal-title">Tạo workflow</h3>
+              </div>
+              <button type="button" class="pm-modal-close" aria-label="Đóng" @click="closeCreateModal">
+                <X :size="18" />
               </button>
+            </header>
+
+            <div class="pm-modal-body">
+              <label class="pm-field">
+                <span class="pm-label">Tên project</span>
+                <input
+                  v-model="newProjectName"
+                  type="text"
+                  class="pm-input"
+                  placeholder="VD: Campaign Tết 2026"
+                  autofocus
+                  @keyup.enter="createProject"
+                />
+              </label>
+
+              <label class="pm-field">
+                <span class="pm-label">Mô tả <span class="pm-optional">(tuỳ chọn)</span></span>
+                <textarea
+                  v-model="newProjectDescription"
+                  class="pm-textarea"
+                  rows="2"
+                  placeholder="Ghi chú ngắn cho team…"
+                />
+              </label>
+
+              <div class="pm-field">
+                <span class="pm-label">Tỷ lệ canvas mặc định</span>
+                <div class="pm-aspect-grid" role="radiogroup" aria-label="Tỷ lệ">
+                  <button
+                    v-for="opt in aspectOptions"
+                    :key="opt.value"
+                    type="button"
+                    class="pm-aspect-opt"
+                    :class="{ 'pm-aspect-opt--on': newProjectAspect === opt.value }"
+                    @click="newProjectAspect = opt.value"
+                  >
+                    <div class="pm-aspect-visual" :class="`pm-aspect-visual--${opt.value}`">
+                      <component :is="opt.Icon" :size="16" aria-hidden="true" />
+                    </div>
+                    <div class="pm-aspect-meta">
+                      <span class="pm-aspect-label">{{ opt.label }}</span>
+                      <span class="pm-aspect-hint">{{ opt.desc }}</span>
+                    </div>
+                    <span class="pm-aspect-check" aria-hidden="true">
+                      <Check v-if="newProjectAspect === opt.value" :size="14" />
+                    </span>
+                  </button>
+                </div>
+              </div>
             </div>
-          </div>
-          <div class="pm-modal-actions">
-            <button type="button" class="pm-cancel" @click="closeCreateModal">Hủy</button>
-            <button type="button" class="pm-submit" :disabled="!newProjectName.trim()" @click="createProject">
-              <Plus :size="18" stroke-width="2.25" />
-              Tạo project
-            </button>
+
+            <footer class="pm-modal-footer">
+              <button type="button" class="pm-cancel" @click="closeCreateModal">Hủy</button>
+              <button type="button" class="pm-submit" :disabled="!newProjectName.trim()" @click="createProject">
+                <Plus :size="17" stroke-width="2.5" />
+                Tạo project
+              </button>
+            </footer>
           </div>
         </div>
-      </div>
+      </Transition>
     </Teleport>
   </section>
 </template>
@@ -329,10 +392,41 @@ onMounted(loadProjects);
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background:
-    radial-gradient(ellipse 80% 50% at 10% -10%, var(--color-accent-bg-fade-1), transparent 55%),
-    radial-gradient(ellipse 60% 40% at 100% 0%, rgba(99, 102, 241, 0.12), transparent 45%),
-    linear-gradient(180deg, #0c0c0f 0%, var(--color-bg) 38%);
+  overflow: hidden;
+  background: linear-gradient(165deg, #0a0a0c 0%, var(--color-bg) 45%, #0d0f14 100%);
+}
+
+.pm-bg-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+}
+
+.pm-bg-orb--1 {
+  width: 420px;
+  height: 420px;
+  top: -120px;
+  left: -80px;
+  background: rgba(250, 204, 21, 0.09);
+}
+
+.pm-bg-orb--2 {
+  width: 320px;
+  height: 320px;
+  top: 10%;
+  right: -60px;
+  background: rgba(99, 102, 241, 0.08);
+}
+
+.pm-bg-grid {
+  position: absolute;
+  inset: 0;
+  opacity: 0.35;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, black, transparent);
 }
 
 .pm-inner {
@@ -340,20 +434,40 @@ onMounted(loadProjects);
   z-index: 1;
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: 1.35rem;
   flex: 1;
   min-height: 0;
-  padding: clamp(1rem, 2.5vw, 1.75rem) clamp(1rem, 2.8vw, 2rem) 1.5rem;
+  padding: clamp(1.1rem, 2.5vw, 1.85rem) clamp(1.1rem, 3vw, 2.25rem) 1.75rem;
   box-sizing: border-box;
 }
 
-/* --- Hero --- */
+/* Hero */
 .pm-hero {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
-  gap: 1rem;
+  gap: 1.25rem;
   flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.pm-hero-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.pm-hero-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 0.85rem;
+  border: 1px solid rgba(250, 204, 21, 0.25);
+  background: linear-gradient(145deg, rgba(250, 204, 21, 0.14), rgba(250, 204, 21, 0.04));
+  color: var(--color-accent-strong);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
   flex-shrink: 0;
 }
 
@@ -361,81 +475,79 @@ onMounted(loadProjects);
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  margin: 0 0 0.4rem;
-  font-size: 0.7rem;
+  margin: 0 0 0.35rem;
+  font-size: 0.68rem;
   font-weight: 700;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--color-accent-strong);
 }
 
-.pm-eyebrow-ic {
-  opacity: 0.9;
-}
-
 .pm-title {
   margin: 0;
-  font-size: clamp(1.5rem, 3vw, 1.85rem);
+  font-size: clamp(1.45rem, 2.8vw, 1.9rem);
   font-weight: 800;
   letter-spacing: -0.03em;
-  line-height: 1.1;
-  background: linear-gradient(115deg, #fff 0%, #e4e4e7 45%, var(--color-accent) 92%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  line-height: 1.12;
+  color: #fafafa;
 }
 
 .pm-sub {
-  margin: 0.5rem 0 0;
-  max-width: 36rem;
-  font-size: 0.9rem;
+  margin: 0.45rem 0 0;
+  max-width: 34rem;
+  font-size: 0.875rem;
   line-height: 1.55;
   color: var(--color-text-muted);
 }
 
-.pm-hero-badge {
-  display: flex;
+.pm-stat {
+  display: inline-flex;
   align-items: center;
   gap: 0.5rem;
   padding: 0.55rem 1rem;
   border-radius: 999px;
   border: 1px solid var(--color-border);
-  background: rgba(19, 21, 26, 0.85);
-  backdrop-filter: blur(8px);
+  background: rgba(19, 21, 26, 0.75);
+  backdrop-filter: blur(10px);
   font-size: 0.8125rem;
   font-weight: 600;
   color: var(--color-text-muted);
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.25);
 }
 
-.pm-hero-badge.dim {
-  opacity: 0.65;
+.pm-stat.dim {
+  opacity: 0.6;
 }
 
-.pm-badge-ic {
+.pm-stat svg {
   color: var(--color-accent-strong);
 }
 
-/* --- Toolbar --- */
+/* Toolbar */
 .pm-toolbar {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem;
+  gap: 0.65rem;
   align-items: stretch;
   flex-shrink: 0;
 }
 
 .pm-search {
   flex: 1;
-  min-width: min(100%, 220px);
+  min-width: min(100%, 240px);
   display: flex;
   align-items: center;
-  gap: 0.65rem;
+  gap: 0.6rem;
   padding: 0 1rem;
-  border-radius: 0.75rem;
+  border-radius: 0.8rem;
   border: 1px solid var(--color-border);
-  background: var(--color-bg-elevated);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  background: rgba(19, 21, 26, 0.8);
+  backdrop-filter: blur(8px);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.pm-search:focus-within {
+  border-color: rgba(250, 204, 21, 0.35);
+  box-shadow: 0 0 0 3px rgba(250, 204, 21, 0.08);
 }
 
 .pm-search-ic {
@@ -448,8 +560,8 @@ onMounted(loadProjects);
   min-width: 0;
   border: none;
   background: transparent;
-  padding: 0.75rem 0;
-  font-size: 0.9rem;
+  padding: 0.72rem 0;
+  font-size: 0.875rem;
   color: var(--color-text);
   outline: none;
 }
@@ -459,13 +571,13 @@ onMounted(loadProjects);
 }
 
 .pm-select {
-  min-width: 11rem;
-  padding: 0.65rem 0.9rem;
-  border-radius: 0.75rem;
+  min-width: 10.5rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 0.8rem;
   border: 1px solid var(--color-border);
-  background: var(--color-bg-elevated);
+  background: rgba(19, 21, 26, 0.8);
   color: var(--color-text);
-  font-size: 0.875rem;
+  font-size: 0.85rem;
   cursor: pointer;
 }
 
@@ -474,25 +586,460 @@ onMounted(loadProjects);
   outline-offset: 1px;
 }
 
-/* --- Main list --- */
+.pm-create-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: none;
+  background: linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-strong) 100%);
+  color: var(--color-text-on-accent);
+  border-radius: 0.8rem;
+  padding: 0 1.1rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 18px rgba(250, 204, 21, 0.28);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.pm-create-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 24px rgba(250, 204, 21, 0.35);
+}
+
+/* Main */
 .pm-main {
-  display: flex;
-  flex-direction: column;
-  gap: 0.65rem;
+  flex: 1;
   min-height: 0;
   min-width: 0;
+  overflow: auto;
+  padding-right: 0.15rem;
+}
+
+.pm-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.85rem;
+  min-height: 16rem;
+  text-align: center;
+  color: var(--color-text-muted);
+}
+
+.pm-state--load p {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.pm-spin {
+  animation: pm-spin 0.85s linear infinite;
+  color: var(--color-accent-strong);
+}
+
+@keyframes pm-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.pm-state--empty {
+  padding: 3rem 1.5rem;
+  border-radius: 1.1rem;
+  border: 1px dashed rgba(255, 255, 255, 0.08);
+  background: rgba(8, 8, 10, 0.45);
+}
+
+.pm-empty-ring {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 5.5rem;
+  height: 5.5rem;
+  border-radius: 50%;
+  border: 1px solid var(--color-border);
+  background: radial-gradient(circle at 30% 30%, rgba(250, 204, 21, 0.12), transparent 65%);
+  color: var(--color-text-muted);
+}
+
+.pm-empty-title {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.pm-empty-text {
+  margin: 0;
+  max-width: 24rem;
+  line-height: 1.55;
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+}
+
+.pm-empty-cta {
+  margin-top: 0.35rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.65rem 1.1rem;
+  border: 1px solid rgba(250, 204, 21, 0.4);
+  border-radius: 0.75rem;
+  background: var(--color-accent-soft);
+  color: var(--color-text);
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.pm-empty-cta:hover {
+  background: rgba(250, 204, 21, 0.22);
+}
+
+/* Grid */
+.pm-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1.25rem;
+}
+
+.pm-card {
+  position: relative;
+  border-radius: 1.15rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #f7f7f8;
+  overflow: hidden;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.22);
+  transition: border-color 0.22s ease, box-shadow 0.22s ease, transform 0.22s ease;
+}
+
+.pm-card:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.32);
+  transform: translateY(-4px);
+}
+
+.pm-card--active {
+  border-color: rgba(250, 204, 21, 0.55);
+  box-shadow:
+    0 0 0 2px rgba(250, 204, 21, 0.18),
+    0 18px 42px rgba(0, 0, 0, 0.35);
+}
+
+.pm-card-open {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.pm-card-media {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: #ececef;
+}
+
+.pm-card-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  transition: transform 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.pm-card:hover .pm-card-img {
+  transform: scale(1.04);
+}
+
+.pm-card-tag {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  padding: 0.55rem 0.95rem 0.6rem;
+  border-radius: 0 0 0.85rem 0;
+  background: #fff;
+  color: #6b7280;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+}
+
+.pm-card-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 0.95rem 1rem 1.05rem;
   flex: 1;
 }
 
-.pm-create-head {
+.pm-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.pm-card-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  color: #18181b;
+}
+
+.pm-active-badge {
+  flex-shrink: 0;
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.22rem 0.48rem;
+  border-radius: 999px;
+  background: rgba(250, 204, 21, 0.18);
+  color: #a16207;
+  border: 1px solid rgba(250, 204, 21, 0.35);
+}
+
+.pm-card-desc {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.65;
+  color: #71717a;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.pm-card-desc--muted {
+  color: #a1a1aa;
+  font-style: italic;
+}
+
+.pm-card-foot {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  font-size: 0.8rem;
+  justify-content: space-between;
+  gap: 0.65rem;
+  margin-top: 0.15rem;
+  flex-wrap: wrap;
+}
+
+.pm-ratio-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 3.25rem;
+  padding: 0.38rem 0.9rem;
+  border-radius: 999px;
+  background: #c96452;
+  color: #fff;
+  font-size: 0.8125rem;
   font-weight: 700;
+  letter-spacing: 0.02em;
+  box-shadow: 0 4px 12px rgba(201, 100, 82, 0.28);
+}
+
+.pm-card-date {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.68rem;
+  color: #a1a1aa;
+}
+
+.pm-card-date time {
+  font-variant-numeric: tabular-nums;
+}
+
+.pm-card-actions {
+  position: absolute;
+  top: 0.65rem;
+  right: 0.65rem;
+  display: flex;
+  gap: 0.3rem;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+  z-index: 2;
+}
+
+.pm-card:hover .pm-card-actions,
+.pm-card--active .pm-card-actions {
+  opacity: 1;
+}
+
+.pm-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.85rem;
+  height: 1.85rem;
+  border-radius: 0.45rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(6px);
+  color: #f4f4f5;
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.pm-icon:hover {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(0, 0, 0, 0.7);
+}
+
+.pm-icon--danger:hover {
+  color: #fecaca;
+  border-color: rgba(248, 113, 113, 0.45);
+  background: rgba(248, 113, 113, 0.15);
+}
+
+.pm-icon--ok {
+  color: #86efac;
+  border-color: rgba(34, 197, 94, 0.35);
+}
+
+.pm-icon--ok:hover {
+  background: rgba(34, 197, 94, 0.15);
+}
+
+.pm-rename {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.pm-rename-input {
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(250, 204, 21, 0.5);
+  background: #fff;
+  color: #18181b;
+  padding: 0.5rem 0.65rem;
+  font-size: 0.875rem;
+}
+
+.pm-rename-row {
+  display: flex;
+  gap: 0.3rem;
+}
+
+/* Modal */
+.pm-modal-enter-active,
+.pm-modal-leave-active {
+  transition: opacity 0.22s ease;
+}
+
+.pm-modal-enter-active .pm-modal-card,
+.pm-modal-leave-active .pm-modal-card {
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.22s ease;
+}
+
+.pm-modal-enter-from,
+.pm-modal-leave-to {
+  opacity: 0;
+}
+
+.pm-modal-enter-from .pm-modal-card,
+.pm-modal-leave-to .pm-modal-card {
+  transform: scale(0.96) translateY(8px);
+  opacity: 0;
+}
+
+.pm-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(8px);
+  padding: 1rem;
+}
+
+.pm-modal-card {
+  width: min(480px, 100%);
+  display: flex;
+  flex-direction: column;
+  border-radius: 1.1rem;
+  border: 1px solid var(--color-border);
+  background: linear-gradient(165deg, rgba(250, 204, 21, 0.06) 0%, transparent 40%), var(--color-bg-elevated);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+.pm-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.15rem 1.25rem 0;
+}
+
+.pm-modal-eyebrow {
+  margin: 0 0 0.25rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  color: var(--color-accent-strong);
+}
+
+.pm-modal-title {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.pm-modal-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.55rem;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-soft);
   color: var(--color-text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.pm-modal-close:hover {
+  color: var(--color-text);
+  border-color: #52525b;
+}
+
+.pm-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 1rem 1.25rem;
+}
+
+.pm-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 0.85rem 1.25rem 1.15rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(0, 0, 0, 0.15);
 }
 
 .pm-field {
@@ -524,7 +1071,7 @@ onMounted(loadProjects);
   border: 1px solid var(--color-border);
   background: var(--color-bg-soft);
   color: var(--color-text);
-  font-size: 0.9rem;
+  font-size: 0.875rem;
   font-family: inherit;
   padding: 0.65rem 0.75rem;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
@@ -533,98 +1080,135 @@ onMounted(loadProjects);
 .pm-input:focus,
 .pm-textarea:focus {
   outline: none;
-  border-color: rgba(234, 179, 8, 0.45);
+  border-color: rgba(250, 204, 21, 0.45);
   box-shadow: 0 0 0 3px var(--color-accent-soft);
 }
 
 .pm-textarea {
   resize: vertical;
-  min-height: 4.5rem;
+  min-height: 3.5rem;
   line-height: 1.45;
 }
 
-.pm-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
+.pm-aspect-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.55rem;
 }
 
-.pm-chip {
+.pm-aspect-opt {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.1rem;
-  padding: 0.45rem 0.65rem;
-  min-width: 4.25rem;
-  border-radius: 0.55rem;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.65rem 0.7rem;
+  border-radius: 0.75rem;
   border: 1px solid var(--color-border);
   background: var(--color-bg-soft);
   color: var(--color-text-muted);
   cursor: pointer;
   font-family: inherit;
+  text-align: left;
   transition: all 0.18s ease;
 }
 
-.pm-chip:hover {
+.pm-aspect-opt:hover {
   border-color: #52525b;
   color: var(--color-text);
 }
 
-.pm-chip--on {
-  border-color: rgba(234, 179, 8, 0.55);
-  background: var(--color-accent-soft);
+.pm-aspect-opt--on {
+  border-color: rgba(250, 204, 21, 0.5);
+  background: rgba(250, 204, 21, 0.08);
   color: var(--color-text);
-  box-shadow: 0 0 0 1px rgba(234, 179, 8, 0.12);
+  box-shadow: 0 0 0 1px rgba(250, 204, 21, 0.12);
 }
 
-.pm-chip-label {
-  font-size: 0.8rem;
-  font-weight: 800;
-  letter-spacing: 0.02em;
-}
-
-.pm-chip-hint {
-  font-size: 0.65rem;
-  font-weight: 600;
-  opacity: 0.85;
-}
-
-.pm-create-btn {
-  display: inline-flex;
+.pm-aspect-visual {
+  display: flex;
   align-items: center;
-  gap: 0.45rem;
-  border: 1px solid rgba(234, 179, 8, 0.5);
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 0.4rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.3);
+  color: var(--color-text-muted);
+}
+
+.pm-aspect-opt--on .pm-aspect-visual {
+  color: var(--color-accent-strong);
+  border-color: rgba(250, 204, 21, 0.3);
+}
+
+.pm-aspect-visual--portrait {
+  width: 1.65rem;
+  height: 2.85rem;
+}
+
+.pm-aspect-visual--landscape {
+  width: 2.85rem;
+  height: 1.65rem;
+}
+
+.pm-aspect-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.pm-aspect-label {
+  font-size: 0.85rem;
+  font-weight: 800;
+}
+
+.pm-aspect-hint {
+  font-size: 0.65rem;
+  opacity: 0.8;
+}
+
+.pm-aspect-check {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 50%;
   background: var(--color-accent-soft);
+  color: var(--color-accent-strong);
+  flex-shrink: 0;
+}
+
+.pm-cancel {
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-soft);
   color: var(--color-text);
-  border-radius: 0.75rem;
-  padding: 0 0.95rem;
-  font-size: 0.86rem;
-  font-weight: 700;
+  border-radius: 0.65rem;
+  padding: 0.6rem 1rem;
+  font-weight: 600;
+  font-size: 0.85rem;
   cursor: pointer;
 }
 
 .pm-submit {
-  margin-top: 0.25rem;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 0.45rem;
-  width: 100%;
-  padding: 0.7rem 1rem;
+  gap: 0.4rem;
+  padding: 0.6rem 1.1rem;
   border: none;
   border-radius: 0.65rem;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   font-weight: 700;
   cursor: pointer;
   color: var(--color-text-on-accent);
   background: linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-strong) 100%);
-  box-shadow: 0 6px 20px rgba(234, 179, 8, 0.25);
+  box-shadow: 0 4px 16px rgba(250, 204, 21, 0.25);
   transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
 }
 
 .pm-submit:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 10px 28px rgba(234, 179, 8, 0.32);
+  box-shadow: 0 8px 22px rgba(250, 204, 21, 0.32);
 }
 
 .pm-submit:disabled {
@@ -634,330 +1218,14 @@ onMounted(loadProjects);
   box-shadow: none;
 }
 
-.pm-main-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.75rem;
-  flex-shrink: 0;
-}
-
-.pm-main-title {
-  margin: 0;
-  font-size: 0.8rem;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--color-text-muted);
-}
-
-.pm-main-hint {
-  margin: 0;
-  font-size: 0.75rem;
-  color: #71717a;
-}
-
-.pm-list-wrap {
-  flex: 1;
-  min-height: 0;
-  border-radius: 1rem;
-  border: 1px solid var(--color-border);
-  background: rgba(8, 8, 10, 0.65);
-  overflow: auto;
-  padding: 1rem;
-}
-
-.pm-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.75rem;
-  min-height: 12rem;
-  text-align: center;
-  color: var(--color-text-muted);
-  font-size: 0.9rem;
-}
-
-.pm-state--load p {
-  margin: 0;
-}
-
-.pm-spin {
-  animation: pm-spin 0.85s linear infinite;
-  color: var(--color-accent-strong);
-}
-
-@keyframes pm-spin {
-  to {
-    transform: rotate(360deg);
+@media (max-width: 520px) {
+  .pm-aspect-grid {
+    grid-template-columns: 1fr;
   }
-}
 
-.pm-state--empty {
-  padding: 2rem 1rem;
-}
-
-.pm-empty-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 4.5rem;
-  height: 4.5rem;
-  border-radius: 1rem;
-  border: 1px dashed var(--color-border);
-  color: var(--color-text-muted);
-  background: var(--color-bg-soft);
-}
-
-.pm-empty-title {
-  margin: 0;
-  font-size: 1.05rem;
-  font-weight: 700;
-  color: var(--color-text);
-}
-
-.pm-empty-text {
-  margin: 0;
-  max-width: 22rem;
-  line-height: 1.55;
-  font-size: 0.875rem;
-}
-
-.pm-empty-text strong {
-  color: var(--color-accent-strong);
-  font-weight: 700;
-}
-
-/* Masonry 3 cột */
-.pm-grid {
-  column-count: 3;
-  column-gap: 1rem;
-}
-
-@media (max-width: 1100px) {
-  .pm-grid {
-    column-count: 2;
+  .pm-hero-left {
+    flex-direction: column;
+    gap: 0.75rem;
   }
-}
-
-@media (max-width: 640px) {
-  .pm-grid {
-    column-count: 1;
-  }
-}
-
-.pm-card {
-  position: relative;
-  break-inside: avoid;
-  page-break-inside: avoid;
-  margin-bottom: 1rem;
-  display: inline-block;
-  width: 100%;
-  vertical-align: top;
-  box-sizing: border-box;
-  border-radius: 0.85rem;
-  border: 1px solid var(--color-border);
-  background: var(--color-bg-elevated);
-  overflow: hidden;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
-}
-
-.pm-card:hover {
-  border-color: #3f4654;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
-  transform: translateY(-2px);
-}
-
-.pm-card--active {
-  border-color: rgba(234, 179, 8, 0.55);
-  box-shadow: 0 0 0 1px rgba(234, 179, 8, 0.12), 0 12px 36px rgba(0, 0, 0, 0.35);
-}
-
-.pm-card-accent {
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  background: linear-gradient(180deg, var(--color-accent) 0%, var(--color-accent-strong) 100%);
-  opacity: 0;
-  transition: opacity 0.2s ease;
-}
-
-.pm-card--active .pm-card-accent,
-.pm-card:hover .pm-card-accent {
-  opacity: 1;
-}
-
-.pm-card-inner {
-  padding: 1rem 1rem 1rem 0.85rem;
-  cursor: pointer;
-  min-height: 7.5rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.pm-card-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.pm-ratio {
-  font-size: 0.65rem;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  padding: 0.25rem 0.5rem;
-  border-radius: 0.35rem;
-  background: var(--color-accent-soft);
-  color: var(--color-accent-strong);
-  border: 1px solid rgba(234, 179, 8, 0.25);
-}
-
-.pm-card-actions {
-  display: flex;
-  gap: 0.25rem;
-}
-
-.pm-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 2rem;
-  height: 2rem;
-  border-radius: 0.45rem;
-  border: 1px solid var(--color-border);
-  background: var(--color-bg-soft);
-  color: var(--color-text-muted);
-  cursor: pointer;
-  padding: 0;
-  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
-}
-
-.pm-icon:hover {
-  color: var(--color-text);
-  border-color: #52525b;
-  background: #27272a;
-}
-
-.pm-icon--danger:hover {
-  color: #fecaca;
-  border-color: rgba(248, 113, 113, 0.45);
-  background: rgba(248, 113, 113, 0.08);
-}
-
-.pm-icon--ok {
-  color: #86efac;
-  border-color: rgba(34, 197, 94, 0.35);
-}
-
-.pm-icon--ok:hover {
-  background: rgba(34, 197, 94, 0.12);
-  color: #bbf7d0;
-}
-
-.pm-card-title {
-  margin: 0;
-  font-size: 1.02rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1.25;
-  color: var(--color-text);
-}
-
-.pm-card-desc {
-  margin: 0;
-  font-size: 0.8125rem;
-  line-height: 1.5;
-  color: #d4d4d8;
-  display: -webkit-box;
-  -webkit-line-clamp: 4;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.pm-card-desc--muted {
-  color: #71717a;
-  font-style: italic;
-}
-
-.pm-card-foot {
-  margin-top: auto;
-  padding-top: 0.35rem;
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  font-size: 0.7rem;
-  color: #71717a;
-}
-
-.pm-card-foot time {
-  font-variant-numeric: tabular-nums;
-}
-
-.pm-rename {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.pm-rename-input {
-  width: 100%;
-  box-sizing: border-box;
-  border-radius: 0.5rem;
-  border: 1px solid rgba(234, 179, 8, 0.55);
-  background: var(--color-bg);
-  color: var(--color-text);
-  padding: 0.5rem 0.65rem;
-  font-size: 0.9rem;
-}
-
-.pm-rename-row {
-  display: flex;
-  gap: 0.35rem;
-}
-
-.pm-modal-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 1200;
-  display: grid;
-  place-items: center;
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(6px);
-  padding: 1rem;
-}
-
-.pm-modal-card {
-  width: min(520px, 100%);
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  padding: 1.15rem 1.2rem 1.25rem;
-  border-radius: 1rem;
-  border: 1px solid var(--color-border);
-  background:
-    linear-gradient(160deg, var(--color-accent-bg-fade-2) 0%, transparent 42%),
-    var(--color-bg-elevated);
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
-}
-
-.pm-modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.5rem;
-}
-
-.pm-cancel {
-  border: 1px solid var(--color-border);
-  background: var(--color-bg-soft);
-  color: var(--color-text);
-  border-radius: 0.65rem;
-  padding: 0.7rem 1rem;
-  font-weight: 600;
-  cursor: pointer;
 }
 </style>

@@ -1,6 +1,6 @@
 {
   "name": "ideastudio-cli",
-  "version": "2.1.28",
+  "version": "2.2.2",
   "description": "",
   "main": "index.js",
   "bin": {

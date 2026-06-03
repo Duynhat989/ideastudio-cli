@@ -1,11 +1,11 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import {
-    WandSparkles,
+    // WandSparkles,
     GitCompareArrows,
-    Store,
+    Image,
+    Video,
     Settings,
-    UserRoundCog,
     ChevronLeft,
     ChevronRight,
     Info,
@@ -28,10 +28,12 @@ defineProps({
 
 const emit = defineEmits(['select-item', 'logout'])
 const menuItems = [
-    { name: 'Motion Video', icon: WandSparkles },
+    // { name: 'Motion Video', icon: WandSparkles }, // tạm tắt
+    { name: 'Gen Image', icon: Image },
+    { name: 'Gen Video', icon: Video },
     { name: 'Workflow Video', icon: GitCompareArrows },
     // { name: 'WorkFlow Store', icon: Store },
-    { name: 'Browser Profiles', icon: UserRoundCog },
+    // { name: 'Browser Profiles', icon: UserRoundCog },
     { name: 'Setup', icon: Settings },
 ]
 

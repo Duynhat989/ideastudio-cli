@@ -2,11 +2,13 @@
 import { computed, ref, onMounted, watch } from 'vue'
 import Sidebar from './components/Sidebar.vue'
 import FlowAI from './pages/FlowAI.vue'
+import GenImage from './pages/GenImage.vue'
+import GenVideo from './pages/GenVideo.vue'
 import FlowStores from './pages/FlowStores.vue'
 import Setup from './pages/Setup.vue'
-import IdolAI from './pages/IdolAI.vue'
+// import IdolAI from './pages/IdolAI.vue' // Motion Video — tạm tắt
 import AuthView from './pages/AuthView.vue'
-import BrowserProfiles from './pages/BrowserProfiles.vue'
+// import BrowserProfiles from './pages/BrowserProfiles.vue'
 import Notify from './components/Notify.vue'
 import { hasVeo3VideoConfigured } from './utils/veoSetup.js'
 import { notify } from './composables/useNotify.js'
@@ -21,16 +23,20 @@ const fullText = "IdeaStudio"
 const currentBalance = ref(0)
 const currentPage = ref('Auth')
 const workflowOpenTrigger = ref(0)
+const VEO_REQUIRED_PAGES = ['Workflow Video', 'Gen Video']
+
 const pageMap = {
 	'Auth': AuthView,
-	'Motion Video': IdolAI,
+	// 'Motion Video': IdolAI, // tạm tắt
+	'Gen Image': GenImage,
+	'Gen Video': GenVideo,
 	'Workflow Video': FlowAI,
 	// 'WorkFlow Store': FlowStores,
-	'Browser Profiles': BrowserProfiles,
+	// 'Browser Profiles': BrowserProfiles,
 	Setup
 }
 
-const currentView = computed(() => pageMap[currentPage.value] ?? IdolAI)
+const currentView = computed(() => pageMap[currentPage.value] ?? FlowAI)
 const currentViewKey = computed(() => {
 	if (currentPage.value === 'Workflow Video') {
 		return `workflow-${workflowOpenTrigger.value}`
@@ -50,11 +56,15 @@ const onLoginSuccess = (payload) => {
 		currentBalance.value = payload.balance
 		currentBalanceNow.value = payload.balance
 	}
-	currentPage.value = 'Motion Video'
+	currentPage.value = 'Workflow Video'
+	workflowOpenTrigger.value += 1
+	if (!hasVeo3VideoConfigured()) {
+		showVeoSetupModal.value = true
+	}
 }
 
 const onSelectPage = (page) => {
-	if (page === 'Workflow Video' && !hasVeo3VideoConfigured()) {
+	if (VEO_REQUIRED_PAGES.includes(page) && !hasVeo3VideoConfigured()) {
 		showVeoSetupModal.value = true
 		return
 	}
@@ -209,8 +219,8 @@ onMounted(() => {
 				<div class="veo-setup-card" @click.stop>
 					<h2 id="veo-setup-title" class="veo-setup-title">Chưa cấu hình Veo 3</h2>
 					<p class="veo-setup-text">
-						Workflow Video cần tài khoản Veo trong Cài đặt (ít nhất token và cookie cho tài khoản đầu tiên).
-						Vui lòng thêm cấu hình rồi quay lại mục Workflow Video.
+						Gen Video và Workflow Video cần tài khoản Veo trong Cài đặt (ít nhất token và cookie cho tài khoản đầu tiên).
+						Vui lòng thêm cấu hình rồi quay lại.
 					</p>
 					<div class="veo-setup-actions">
 						<button type="button" class="veo-setup-btn veo-setup-btn-muted" @click="dismissVeoModal">
