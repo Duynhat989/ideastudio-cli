@@ -1,93 +1,134 @@
 # IdeaStudio CLI
 
-## Installation
+> **Turn ideas into video — on your machine.**  
+> AI workflow canvas, image & video generation, and a pro render timeline. One command, studio open.
+
+**Official install page:** [idea2vid.com](https://www.idea2vid.com/)
+
+---
+
+## What you get
+
+| | |
+|---|---|
+| **Workflow Video** | Node-based canvas — Start, AI Chat, image/video gen, loops, preview… then run it all automatically |
+| **Gen Image / Gen Video** | Standalone creation studios wired into your flows |
+| **Render Editor** | Editor-style timeline: trim, text overlays, export |
+| **Runs locally** | Express backend + Vue UI; browser opens automatically on start |
+
+No separate Electron install — just **Node.js** and a terminal.
+
+---
+
+## Quick install
+
+Full guides, downloads, and the latest release:
+
+**[https://www.idea2vid.com/](https://www.idea2vid.com/)**
+
+Install via npm (global):
 
 ```bash
 npm install -g ideastudio-cli
 ```
 
-## Run the App
+**Requires:** Node.js **≥ 18**
+
+---
+
+## Run the studio
 
 ```bash
 ideastudio
 ```
 
-## Full Syntax
+Starts the server, serves the built web UI, and **opens your browser**.  
+Sign in, open **Workflow Video**, and start dragging nodes.
+
+---
+
+## CLI commands
+
+| Command | Description |
+|---------|-------------|
+| `ideastudio` | Run release mode (default) |
+| `ideastudio dev` | Dev mode — backend + Vite hot reload |
+| `ideastudio stop` | Stop the running instance |
+| `ideastudio doctor` | Check runtime status |
+| `ideastudio update` | Show the CLI update command |
+
+### Options
 
 ```bash
-ideastudio [command] [--port <number>] [--no-open]
+ideastudio --port 1212              # custom server port
+ideastudio --port=1212 --no-open    # do not open the browser
 ```
 
-## Commands
-
-```bash
-ideastudio
-```
-Run the release mode (default `start` command).
-
-```bash
-ideastudio dev
-```
-Run development mode (backend + Vite hot reload).
-
-```bash
-ideastudio stop
-```
-Stop the running instance.
-
-```bash
-ideastudio doctor
-```
-Show runtime status.
-
-```bash
-ideastudio update
-```
-Show the CLI update command.
-
-## Options After `--`
-
-```bash
---port <number>
---port=<number>
-```
-Set the server port (applies to `start`).
-
-```bash
---no-open
-```
-Do not open the browser automatically after start.
-
-## Examples
+### Examples
 
 ```bash
 ideastudio --port 1212
-ideastudio --port=1212 --no-open
 ideastudio stop
+ideastudio doctor
 ```
 
-## Stop the App
+---
 
-Method 1: In the terminal running `ideastudio`, press:
+## Stop the app
 
-```bash
+**Option 1** — In the terminal running `ideastudio`:
+
+```
 Ctrl + C
 ```
 
-Method 2: From any terminal:
+**Option 2** — From another terminal:
 
 ```bash
 ideastudio stop
 ```
 
-## Update to the Latest Version
+---
+
+## Update
 
 ```bash
 npm update -g ideastudio-cli
-```
-
-After updating, run again:
-
-```bash
 ideastudio
 ```
+
+Or follow the steps on [idea2vid.com](https://www.idea2vid.com/).
+
+---
+
+## Development (contributors)
+
+Clone the repo, install dependencies, and run dev:
+
+```bash
+git clone <repo-url>
+cd ideastudio-cli
+npm install
+npm run dev          # ideastudio dev — hot reload
+npm run build        # build frontend → dist/
+```
+
+---
+
+## Suggested workflow
+
+```
+Idea → Workflow canvas → Gen image/video → Render timeline → Export
+```
+
+1. Create a project in **Workflow Video**
+2. Connect nodes (input, AI, generation, loops…)
+3. Open **Render** to edit the timeline and export
+4. Save your flow as JSON — import/export anytime from the toolbar
+
+---
+
+<p align="center">
+  <strong>IdeaStudio</strong> · CLI <code>v2.2.3</code> ·
+  <a href="https://www.idea2vid.com/">idea2vid.com</a>
+</p>
