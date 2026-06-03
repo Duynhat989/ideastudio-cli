@@ -1,5 +1,6 @@
 <script setup>
 import { inject, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useFlowNodeGenTimer } from '../composables/useFlowNodeGenTimer.js';
 import { shouldUseVideoPreview } from '@/utils/flowMedia.js';
 import { Handle, Position } from '@vue-flow/core';
@@ -13,6 +14,7 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['delete']);
+const { t } = useI18n();
 const openImage = inject('openImage');
 
 const onRun = () => props.data.onRun?.();
@@ -40,7 +42,7 @@ const { elapsedLabel } = useFlowNodeGenTimer(nodeStatus);
       <template #viewport>
         <div v-if="data.result" class="media-fill tap-open" @click="openImage?.(data.result)">
           <video :src="data.result" controls playsinline class="vid" />
-          <button type="button" class="clear-fab" title="Xóa kết quả" @click.stop="onClear">
+          <button type="button" class="clear-fab" :title="t('flow.clearResult')" @click.stop="onClear">
             <Trash2 :size="15" />
           </button>
         </div>
@@ -50,7 +52,7 @@ const { elapsedLabel } = useFlowNodeGenTimer(nodeStatus);
             <Loader2 :size="18" class="node-gen-spin" />
             Đang xử lý… {{ elapsedLabel }}
           </span>
-          <span v-else class="idle-msg">Bấm nút chạy phía dưới · ⚙ chỉnh prompt Kling</span>
+          <span v-else class="idle-msg">{{ t('flow.runKlingBelow') }}</span>
         </div>
       </template>
       <template #config>
@@ -64,7 +66,7 @@ const { elapsedLabel } = useFlowNodeGenTimer(nodeStatus);
           />
         </div>
         <div v-if="data.inputs?.length">
-          <label class="fn-label">Ngữ cảnh ({{ data.inputs.length }})</label>
+          <label class="fn-label">{{ t('common.context', { count: data.inputs.length }) }}</label>
           <div class="fn-preview-scroll">
             <div
               v-for="(item, index) in data.inputs"
@@ -80,7 +82,7 @@ const { elapsedLabel } = useFlowNodeGenTimer(nodeStatus);
         </div>
         <div class="fn-row" style="gap: 0.5rem">
           <div style="flex: 1; min-width: 0">
-            <label class="fn-label">Hướng</label>
+            <label class="fn-label">{{ t('flow.direction') }}</label>
             <select
               class="fn-select"
               :value="data.characterOrientation || 'video'"
@@ -116,7 +118,7 @@ const { elapsedLabel } = useFlowNodeGenTimer(nodeStatus);
               ? 'flow-node-run-fab--cancel'
               : 'flow-node-run-fab--kling'
           "
-          :title="data.status === 'running' ? `Hủy (${elapsedLabel})` : 'Chạy Kling'"
+          :title="data.status === 'running' ? t('flow.cancelRun', { time: elapsedLabel }) : t('flow.runKling')"
           @click.stop="data.status === 'running' ? data.onCancel?.() : onRun()"
         >
           <XCircle v-if="data.status === 'running'" :size="22" stroke-width="2" />

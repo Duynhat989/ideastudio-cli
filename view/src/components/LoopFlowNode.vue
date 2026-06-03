@@ -1,5 +1,6 @@
 <script setup>
 import { computed, inject } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { Handle, Position } from '@vue-flow/core';
 import { Repeat, FolderOpen, PlayCircle, XCircle, Loader2 } from 'lucide-vue-next';
 import FlowNodeShell from '@/components/FlowNodeShell.vue';
@@ -10,6 +11,7 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['delete']);
+const { t } = useI18n();
 
 const imageInputOptions = inject('loopFlowImageInputOptions', computed(() => []));
 const videoInputOptions = inject('loopFlowVideoInputOptions', computed(() => []));
@@ -52,44 +54,42 @@ const busy = computed(() => props.data?.status === 'running');
             {{ data.loopProgress || 'Đang lặp…' }}
           </span>
           <span v-else class="idle-msg">
-            {{ data.folderPath ? 'Sẵn sàng · bấm nút chạy' : '⚙ Chọn thư mục và node đích' }}
+            {{ data.folderPath ? t('flow.loopReady') : t('flow.loopConfigure') }}
           </span>
           <p v-if="data.folderPath" class="path-ellipsis" :title="data.folderPath">{{ data.folderPath }}</p>
         </div>
       </template>
       <template #config>
-        <p class="fn-muted">
-          Lần lượt đẩy file vào node <strong>Ảnh vào</strong> / <strong>Video vào</strong> rồi gọi automation. Có thể nhập trực tiếp đường dẫn thư mục local.
-        </p>
+        <p class="fn-muted" v-html="t('flow.loopFlowIntro')"></p>
         <div>
-          <label class="fn-label">Đường dẫn thư mục</label>
+          <label class="fn-label">{{ t('flow.folderPath') }}</label>
           <input
             class="fn-input"
             :value="data.folderPath || ''"
-            placeholder="Ví dụ: D:\\media\\input"
+            :placeholder="t('flow.loopFolderPlaceholder')"
             @input="data.onChange?.({ folderPath: $event.target.value })"
           />
         </div>
         <div class="fn-row" style="gap: 0.35rem; flex-wrap: wrap">
           <button type="button" class="fn-btn fn-btn-ghost" :disabled="!hasBridge" @click="pickFolder">
             <FolderOpen :size="16" />
-            Dán/chọn thư mục
+            {{ t('flow.loopPickFolder') }}
           </button>
         </div>
         <div>
-          <label class="fn-label">Phân loại</label>
+          <label class="fn-label">{{ t('flow.classification') }}</label>
           <select
             class="fn-select"
             :value="data.classifyMode || 'byExtension'"
             @change="data.onChange?.({ classifyMode: $event.target.value })"
           >
-            <option value="byExtension">Theo đuôi file — quét cả cây thư mục</option>
-            <option value="bySubfolder">Theo thư mục con — ảnh / video riêng</option>
+            <option value="byExtension">{{ t('flow.byExtension') }}</option>
+            <option value="bySubfolder">{{ t('flow.bySubfolder') }}</option>
           </select>
         </div>
         <div v-if="(data.classifyMode || 'byExtension') === 'bySubfolder'" class="fn-row" style="gap: 0.5rem">
           <div style="flex: 1; min-width: 0">
-            <label class="fn-label">Tên thư mục ảnh</label>
+            <label class="fn-label">{{ t('flow.imageFolderName') }}</label>
             <input
               class="fn-input"
               :value="data.imageSubfolder || 'images'"
@@ -97,7 +97,7 @@ const busy = computed(() => props.data?.status === 'running');
             />
           </div>
           <div style="flex: 1; min-width: 0">
-            <label class="fn-label">Tên thư mục video</label>
+            <label class="fn-label">{{ t('flow.videoFolderName') }}</label>
             <input
               class="fn-input"
               :value="data.videoSubfolder || 'videos'"
@@ -106,40 +106,40 @@ const busy = computed(() => props.data?.status === 'running');
           </div>
         </div>
         <div>
-          <label class="fn-label">Node ảnh đích</label>
+          <label class="fn-label">{{ t('flow.targetImageNode') }}</label>
           <select
             class="fn-select"
             :value="data.targetImageInputId || ''"
             @change="data.onChange?.({ targetImageInputId: $event.target.value })"
           >
-            <option value="">— Chọn Ảnh vào —</option>
+            <option value="">{{ t('flow.selectImageInput') }}</option>
             <option v-for="opt in imageInputOptions" :key="opt.id" :value="opt.id">{{ opt.label }}</option>
           </select>
         </div>
         <div>
-          <label class="fn-label">Node video đích</label>
+          <label class="fn-label">{{ t('flow.targetVideoNode') }}</label>
           <select
             class="fn-select"
             :value="data.targetVideoInputId || ''"
             @change="data.onChange?.({ targetVideoInputId: $event.target.value })"
           >
-            <option value="">— Chọn Video vào —</option>
+            <option value="">{{ t('flow.selectVideoInput') }}</option>
             <option v-for="opt in videoInputOptions" :key="opt.id" :value="opt.id">{{ opt.label }}</option>
           </select>
         </div>
         <div>
-          <label class="fn-label">Lần chạy tiếp theo</label>
+          <label class="fn-label">{{ t('flow.nextRun') }}</label>
           <select
             class="fn-select"
             :value="data.advanceMode || 'untilIdle'"
             @change="data.onChange?.({ advanceMode: $event.target.value })"
           >
-            <option value="untilIdle">Sau khi flow chạy xong (không còn node AI đang chạy)</option>
-            <option value="timer">Sau khoảng thời gian (giây)</option>
+            <option value="untilIdle">{{ t('flow.afterFlowIdle') }}</option>
+            <option value="timer">{{ t('flow.afterTimer') }}</option>
           </select>
         </div>
         <div v-if="(data.advanceMode || 'untilIdle') === 'timer'">
-          <label class="fn-label">Khoảng cách (giây)</label>
+          <label class="fn-label">{{ t('flow.intervalSeconds') }}</label>
           <input
             class="fn-input"
             type="number"
@@ -156,7 +156,7 @@ const busy = computed(() => props.data?.status === 'running');
           type="button"
           class="flow-node-run-fab"
           :class="busy ? 'flow-node-run-fab--cancel' : 'flow-node-run-fab--primary'"
-          :title="busy ? 'Dừng lặp' : 'Chạy lặp theo thư mục'"
+          :title="busy ? t('flow.stopLoop') : t('flow.runFolderLoop')"
           @click.stop="busy ? onCancel() : onRun()"
         >
           <XCircle v-if="busy" :size="22" stroke-width="2" />

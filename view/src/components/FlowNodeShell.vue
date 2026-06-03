@@ -1,11 +1,13 @@
 <script setup>
 import { ref, useSlots, computed, watch, onUnmounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useEventListener } from '@vueuse/core';
 import { Settings2, X, Trash2 } from 'lucide-vue-next';
 
 /** Nhiều node có thể tồn tại; chỉ bỏ overflow:hidden khi không còn popup nào mở */
 let flowConfigPopupOpenCount = 0;
 
+const { t } = useI18n();
 const slots = useSlots();
 const hasRunSlot = computed(() => typeof slots.run === 'function');
 
@@ -142,7 +144,7 @@ defineExpose({ openConfig: () => { configOpen.value = true; }, closeConfig });
               v-if="showDeleteButton"
               type="button"
               class="flow-node-icon-btn flow-node-delete-btn"
-              title="Xóa node"
+              :title="t('flow.deleteNode')"
               @click.stop="emit('delete')"
             >
               <Trash2 :size="15" stroke-width="2" />
@@ -151,7 +153,7 @@ defineExpose({ openConfig: () => { configOpen.value = true; }, closeConfig });
               v-if="showConfig"
               type="button"
               class="flow-node-icon-btn flow-node-config-toggle"
-              title="Cấu hình node"
+              :title="t('flow.nodeSettings')"
               @click.stop="toggleConfig"
             >
               <Settings2 :size="15" stroke-width="2" />
@@ -204,7 +206,7 @@ defineExpose({ openConfig: () => { configOpen.value = true; }, closeConfig });
               <button
                 type="button"
                 class="flow-node-icon-btn flow-node-config-close"
-                title="Đóng (Esc)"
+                :title="t('flow.closeEsc')"
                 @click="closeConfig"
               >
                 <X :size="16" stroke-width="2" />

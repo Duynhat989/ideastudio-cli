@@ -1,5 +1,6 @@
 <script setup>
 import { ref, watch, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { Settings, X, Plus, Copy, Trash2, ChevronDown } from 'lucide-vue-next';
 import {
     loadAiFlowStructures,
@@ -11,6 +12,8 @@ import {
     BUILDER_TYPES,
     BUILTIN_STRUCTURES,
 } from '@/services/aiFlowNodeStructures.js';
+
+const { t } = useI18n();
 
 const open = defineModel('open', { type: Boolean, default: false });
 const emit = defineEmits(['saved']);
@@ -137,7 +140,7 @@ const updatePromptField = (field, text) => {
                 <header class="afs-header">
                     <div class="afs-title-wrap">
                         <Settings :size="18" class="afs-title-icon" />
-                        <h2 id="afs-title">Cấu trúc sinh node (AI chat)</h2>
+                        <h2 id="afs-title">{{ t('flow.structurePopupTitle') }}</h2>
                     </div>
                     <button type="button" class="afs-close" aria-label="Đóng" @click="close">
                         <X :size="18" />
@@ -147,8 +150,8 @@ const updatePromptField = (field, text) => {
                 <div class="afs-body">
                     <aside class="afs-list">
                         <div class="afs-list-head">
-                            <span>Danh sách</span>
-                            <button type="button" class="afs-icon-btn" title="Thêm cấu trúc" @click="addStructure">
+                            <span>{{ t('flow.structureList') }}</span>
+                            <button type="button" class="afs-icon-btn" :title="t('flow.addStructure')" @click="addStructure">
                                 <Plus :size="16" />
                             </button>
                         </div>
@@ -165,7 +168,7 @@ const updatePromptField = (field, text) => {
                                 >
                                     <span class="afs-item-name">{{ s.name }}</span>
                                     <span class="afs-item-meta">{{ builderLabel(s.builder) }}</span>
-                                    <span v-if="s.id === activeId" class="afs-badge">Đang dùng</span>
+                                    <span v-if="s.id === activeId" class="afs-badge">{{ t('flow.structureInUse') }}</span>
                                 </button>
                             </li>
                         </ul>
@@ -211,23 +214,23 @@ const updatePromptField = (field, text) => {
                             </button>
                             <div v-show="expandedSection === 'meta'" class="afs-section-body">
                                 <label class="afs-field">
-                                    <span>Tên</span>
+                                    <span>{{ t('flow.structureName') }}</span>
                                     <input v-model="selected.name" type="text" class="afs-input" />
                                 </label>
                                 <label class="afs-field">
-                                    <span>Mô tả</span>
+                                    <span>{{ t('flow.structureDescription') }}</span>
                                     <textarea v-model="selected.description" class="afs-textarea" rows="2" />
                                 </label>
                                 <label class="afs-field">
                                     <span>Kiểu sinh node</span>
                                     <select v-model="selected.builder" class="afs-select">
-                                        <option :value="BUILDER_TYPES.PHASED_CLIPS">Phased clips (mặc định)</option>
+                                        <option :value="BUILDER_TYPES.PHASED_CLIPS">{{ t('flow.builderPhased') }}</option>
                                         <option :value="BUILDER_TYPES.FULL_GRAPH">Full graph JSON</option>
                                     </select>
                                 </label>
                                 <div class="afs-row">
                                     <label class="afs-field afs-field--inline">
-                                        <span>Giây/clip</span>
+                                        <span>{{ t('flow.secondsPerClip') }}</span>
                                         <input v-model.number="selected.clipSeconds" type="number" min="1" max="60" class="afs-input" />
                                     </label>
                                     <label class="afs-field afs-field--inline">
@@ -235,7 +238,7 @@ const updatePromptField = (field, text) => {
                                         <input v-model.number="selected.maxClips" type="number" min="1" max="24" class="afs-input" />
                                     </label>
                                     <label class="afs-field afs-field--inline">
-                                        <span>Max ảnh input</span>
+                                        <span>{{ t('flow.maxImageInputs') }}</span>
                                         <input v-model.number="selected.maxImageInputs" type="number" min="1" max="12" class="afs-input" />
                                     </label>
                                     <label v-if="selected.builder === BUILDER_TYPES.PHASED_CLIPS" class="afs-field afs-field--inline">
@@ -317,7 +320,7 @@ const updatePromptField = (field, text) => {
                 </div>
 
                 <footer class="afs-footer">
-                    <button type="button" class="afs-btn afs-btn--primary" @click="onSave">Lưu &amp; đóng</button>
+                    <button type="button" class="afs-btn afs-btn--primary" @click="onSave">{{ t('flow.saveAndClose') }}</button>
                 </footer>
             </div>
         </div>

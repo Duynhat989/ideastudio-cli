@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Upload } from 'lucide-vue-next'
 import GenStudioShell from '@/components/gen/GenStudioShell.vue'
 import { upscaleNanoImage, nanoImageResultUrl, getSettings } from '@/services/nanoai'
@@ -14,6 +15,8 @@ import { imageAspectToCss } from '@/utils/genAspectRatio.js'
 import { sanitizeImagePromptForSafety, isPolicyBlockedError } from '@/utils/flowPromptSafety.js'
 import { useGenBatchTasks } from '@/composables/useGenBatchTasks.js'
 import { notify } from '@/composables/useNotify.js'
+
+const { t } = useI18n()
 
 const prompt = ref('')
 const imageModel = ref('GEM_PIX_2')
@@ -96,14 +99,14 @@ const extractFlowTaskErrorMessage = (payload) => {
 }
 
 const formatFlowErrorText = (text) => {
-  const t = String(text || '')
-  if (t.includes('PUBLIC_ERROR_PROMINENT_PEOPLE')) {
-    return 'Ảnh tham chiếu có thể chứa người nổi tiếng. Vui lòng đổi ảnh khác.'
+  const raw = String(text || '')
+  if (raw.includes('PUBLIC_ERROR_PROMINENT_PEOPLE')) {
+    return t('gen.policyProminentPeople')
   }
-  if (t.includes('PUBLIC_ERROR_SEXUAL') || t.includes('NCII')) {
-    return 'Nội dung bị từ chối bởi chính sách an toàn. Hãy đổi prompt hoặc ảnh tham chiếu.'
+  if (raw.includes('PUBLIC_ERROR_SEXUAL') || raw.includes('NCII')) {
+    return t('gen.policySafety')
   }
-  return t.trim()
+  return raw.trim()
 }
 
 const throwFlowTaskError = (payload) => {
@@ -113,14 +116,15 @@ const throwFlowTaskError = (payload) => {
   throw err
 }
 
-const extractErrMessage = (err, fallback = 'Lỗi tạo ảnh') => {
-  if (!err) return fallback
+const extractErrMessage = (err, fallback) => {
+  const fb = fallback ?? t('gen.errorImage')
+  if (!err) return fb
   if (err?.flowPayload) {
     const fromPayload = formatFlowErrorText(extractFlowTaskErrorMessage(err.flowPayload))
     if (fromPayload) return fromPayload
   }
   const msg = formatFlowErrorText(String(err?.message || '').trim())
-  return msg || fallback
+  return msg || fb
 }
 
 const isInternalRetryable = (err) =>
@@ -163,10 +167,11 @@ const succeedTask = (task, patch) => {
   patchGenTask(task, { status: 'success', error: null, ...patch })
 }
 
-const ensureTaskSettled = (task, fallback = 'Không nhận được kết quả từ API') => {
+const ensureTaskSettled = (task, fallback) => {
+  const fb = fallback ?? t('gen.noApiResult')
   const live = getLiveTask(task)
   if (live.status === 'generating' || live.status === 'upscaling') {
-    failTask(live, new Error(fallback), fallback)
+    failTask(live, new Error(fb), fb)
   }
 }
 
@@ -283,7 +288,7 @@ const runImageTask = async (task, base64Inputs, currentPrompt, currentModel, cur
         })
         const resultUrl = nanoImageResultUrl(resultData)
         if (!resultUrl) {
-          throw new Error('API trả về thành công nhưng thiếu URL ảnh')
+          throw new Error(t('gen.successNoImageUrl'))
         }
         succeedTask(task, {
           result: resultUrl,
@@ -323,8 +328,8 @@ const handleGenerate = async () => {
   const settings = getSettings()
   if (!settings.nanoToken || !settings.imageAccessToken) {
     await notify.alert({
-      title: 'Chưa cấu hình',
-      message: 'Vui lòng cấu hình Nano API và tài khoản Veo (token) trong mục Setup.',
+      title: t('gen.notConfiguredTitle'),
+      message: t('gen.notConfiguredImage'),
       variant: 'warning',
     })
     return
@@ -354,7 +359,7 @@ const handleGenerate = async () => {
     await Promise.allSettled(
       slots.map((task) => runImageTask(task, base64Inputs, currentPrompt, currentModel, currentRatio)),
     )
-    settleStuckSlots(slots, new Error('Tạo ảnh không hoàn tất'))
+    settleStuckSlots(slots, new Error(t('gen.imageIncomplete')))
   } catch (err) {
     settleStuckSlots(slots, err)
   } finally {
@@ -366,8 +371,8 @@ const handleGenerate = async () => {
 const handleUpscale = async (task) => {
   if (!task.mediaId || !task.projectId) {
     await notify.alert({
-      title: 'Không upscale được',
-      message: 'Không tìm thấy mediaId hoặc projectId của ảnh này.',
+      title: t('gen.upscaleFailedTitle'),
+      message: t('gen.upscaleFailedMessage'),
       variant: 'error',
     })
     return
@@ -404,12 +409,12 @@ const handleUpscale = async (task) => {
         isUpscaled: true,
       })
     } else {
-      throw new Error('Upscale xong nhưng không có URL ảnh')
+      throw new Error(t('gen.upscaleNoUrl'))
     }
   } catch (error) {
-    failTask(live, error, 'Lỗi upscale')
+    failTask(live, error, t('gen.errorUpscale'))
   } finally {
-    ensureTaskSettled(live, 'Upscale không hoàn tất')
+    ensureTaskSettled(live, t('gen.upscaleIncomplete'))
     tasks.value = [...tasks.value]
   }
 }
@@ -437,7 +442,7 @@ const handleDownload = (task) => {
     />
 
     <GenStudioShell
-      title="Gen Image"
+      :title="t('nav.genImage')"
       media-type="image"
       accent="image"
       :tasks="tasks"
@@ -448,7 +453,7 @@ const handleDownload = (task) => {
       :can-generate="canGenerate"
       :is-submitting="isSubmitting"
       show-upscale
-      prompt-placeholder="Bạn muốn tạo gì?"
+      :prompt-placeholder="t('gen.promptPlaceholderImage')"
       @update:prompt="prompt = $event"
       @update:batch-count="batchCount = $event"
       @generate="handleGenerate"
@@ -459,12 +464,12 @@ const handleDownload = (task) => {
       <template #settings>
         <div class="cfg-block">
           <div class="cfg-head">
-            <span>Ảnh tham chiếu</span>
-            <button v-if="inputImages.length" type="button" class="cfg-clear" @click="clearRefs">Xóa</button>
+            <span>{{ t('gen.referenceImages') }}</span>
+            <button v-if="inputImages.length" type="button" class="cfg-clear" @click="clearRefs">{{ t('common.delete') }}</button>
           </div>
           <div v-if="!inputImages.length" class="cfg-upload" @click="triggerUpload">
             <Upload :size="18" />
-            <span>Thêm ảnh (tùy chọn)</span>
+            <span>{{ t('gen.addImageOptional') }}</span>
           </div>
           <div v-else class="cfg-thumbs">
             <img v-for="(img, idx) in inputImages" :key="idx" :src="img.url" alt="" />
@@ -474,12 +479,12 @@ const handleDownload = (task) => {
           </div>
         </div>
 
-        <label class="cfg-label">Model</label>
+        <label class="cfg-label">{{ t('common.model') }}</label>
         <select v-model="imageModel" class="cfg-select">
           <option v-for="m in IMAGE_MODELS" :key="m.value" :value="m.value">{{ m.label }}</option>
         </select>
 
-        <label class="cfg-label">Tỷ lệ khung</label>
+        <label class="cfg-label">{{ t('gen.aspectRatio') }}</label>
         <select v-model="aspectRatio" class="cfg-select">
           <option v-for="r in IMAGE_RATIO_OPTIONS" :key="r.value" :value="r.value">{{ r.label }}</option>
         </select>

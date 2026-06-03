@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
-    // WandSparkles,
     GitCompareArrows,
     Image,
     Video,
@@ -27,14 +27,13 @@ defineProps({
 })
 
 const emit = defineEmits(['select-item', 'logout'])
+const { t } = useI18n()
+
 const menuItems = [
-    // { name: 'Motion Video', icon: WandSparkles }, // tạm tắt
-    { name: 'Gen Image', icon: Image },
-    { name: 'Gen Video', icon: Video },
-    { name: 'Workflow Video', icon: GitCompareArrows },
-    // { name: 'WorkFlow Store', icon: Store },
-    // { name: 'Browser Profiles', icon: UserRoundCog },
-    { name: 'Setup', icon: Settings },
+    { id: 'Gen Image', icon: Image, labelKey: 'nav.genImage' },
+    { id: 'Gen Video', icon: Video, labelKey: 'nav.genVideo' },
+    { id: 'Workflow Video', icon: GitCompareArrows, labelKey: 'nav.workflowVideo' },
+    { id: 'Setup', icon: Settings, labelKey: 'nav.setup' },
 ]
 
 const selectItem = (name) => {
@@ -45,7 +44,6 @@ const requestLogout = () => {
     emit('logout')
 }
 
-/** Mặc định thu gọn (rail icon) trên desktop */
 const isCollapsed = ref(true)
 const isWideScreen = ref(true)
 
@@ -62,7 +60,6 @@ onUnmounted(() => {
     window.removeEventListener('resize', updateWide)
 })
 
-/** Chỉ rail hẹp khi desktop + user chọn thu gọn */
 const narrowRail = computed(() => isCollapsed.value && isWideScreen.value)
 
 const toggleCollapse = () => {
@@ -94,17 +91,17 @@ const formatBalance = (n) => {
                     </div>
                     <div v-if="!narrowRail" class="brand-copy">
                         <h1 class="brand-title">IdeaStudio</h1>
-                        <p class="brand-caption">Creative Workspace</p>
+                        <p class="brand-caption">{{ t('nav.creativeWorkspace') }}</p>
                         <p class="brand-balance">
-                            <span class="balance-label">Số dư</span>
-                            <span class="balance-value">{{ formatBalance(currentBalance) }}đ</span>
+                            <span class="balance-label">{{ t('common.balance') }}</span>
+                            <span class="balance-value">{{ formatBalance(currentBalance) }}{{ t('common.currencySuffix') }}</span>
                         </p>
                     </div>
                     <button
                         v-if="isWideScreen"
                         type="button"
                         class="collapse-toggle"
-                        :title="isCollapsed ? 'Mở rộng sidebar' : 'Thu gọn sidebar'"
+                        :title="isCollapsed ? t('nav.expandSidebar') : t('nav.collapseSidebar')"
                         :aria-expanded="!isCollapsed"
                         @click="toggleCollapse"
                     >
@@ -112,7 +109,7 @@ const formatBalance = (n) => {
                         <ChevronRight v-else :size="18" stroke-width="2" />
                     </button>
                 </div>
-                <p v-if="narrowRail" class="rail-balance" :title="`Số dư: ${formatBalance(currentBalance)}đ`">
+                <p v-if="narrowRail" class="rail-balance" :title="`${t('common.balance')}: ${formatBalance(currentBalance)}${t('common.currencySuffix')}`">
                     {{ formatBalance(currentBalance) }}
                 </p>
             </header>
@@ -120,15 +117,15 @@ const formatBalance = (n) => {
             <nav class="menu-list" aria-label="Main menu">
                 <button
                     v-for="item in menuItems"
-                    :key="item.name"
+                    :key="item.id"
                     type="button"
-                    :class="['menu-item', { active: item.name === activeItem }]"
-                    :title="narrowRail ? item.name : undefined"
-                    :aria-current="item.name === activeItem ? 'page' : undefined"
-                    @click="selectItem(item.name)"
+                    :class="['menu-item', { active: item.id === activeItem }]"
+                    :title="narrowRail ? t(item.labelKey) : undefined"
+                    :aria-current="item.id === activeItem ? 'page' : undefined"
+                    @click="selectItem(item.id)"
                 >
                     <component :is="item.icon" :size="18" class="menu-icon" aria-hidden="true" />
-                    <span v-if="!narrowRail" class="menu-label">{{ item.name }}</span>
+                    <span v-if="!narrowRail" class="menu-label">{{ t(item.labelKey) }}</span>
                 </button>
             </nav>
 
@@ -137,20 +134,20 @@ const formatBalance = (n) => {
                     <button
                         type="button"
                         class="menu-item about-btn"
-                        :title="narrowRail ? 'About Us' : undefined"
+                        :title="narrowRail ? t('nav.aboutUs') : undefined"
                         @click="openAbout"
                     >
                         <Info :size="18" class="menu-icon" aria-hidden="true" />
-                        <span v-if="!narrowRail" class="menu-label">About Us</span>
+                        <span v-if="!narrowRail" class="menu-label">{{ t('nav.aboutUs') }}</span>
                     </button>
                     <button
                         type="button"
                         class="menu-item logout-btn"
-                        :title="narrowRail ? 'Đăng xuất' : undefined"
+                        :title="narrowRail ? t('nav.logout') : undefined"
                         @click="requestLogout"
                     >
                         <LogOut :size="18" class="menu-icon" aria-hidden="true" />
-                        <span v-if="!narrowRail" class="menu-label">Đăng xuất</span>
+                        <span v-if="!narrowRail" class="menu-label">{{ t('nav.logout') }}</span>
                     </button>
                 </div>
             </footer>
@@ -166,18 +163,16 @@ const formatBalance = (n) => {
                 @click.self="closeAbout"
             >
                 <div class="about-panel" @click.stop>
-                    <button type="button" class="about-close" aria-label="Đóng" @click="closeAbout">
+                    <button type="button" class="about-close" :aria-label="t('common.close')" @click="closeAbout">
                         <X :size="18" />
                     </button>
                     <div class="about-brand">
                         <img :src="logoApp" alt="" class="about-logo" width="36" height="36" />
                         <h2 id="about-title" class="about-title">IdeaStudio</h2>
                     </div>
-                    <p class="about-lead">Creative workspace cho motion và workflow video.</p>
-                    <p class="about-body">
-                        Công cụ hỗ trợ tạo nội dung, pipeline AI và render — được thiết kế gọn, tập trung vào luồng làm việc thực tế.
-                    </p>
-                    <button type="button" class="about-ok" @click="closeAbout">Đóng</button>
+                    <p class="about-lead">{{ t('nav.aboutLead') }}</p>
+                    <p class="about-body">{{ t('nav.aboutBody') }}</p>
+                    <button type="button" class="about-ok" @click="closeAbout">{{ t('common.close') }}</button>
                 </div>
             </div>
         </Teleport>
@@ -437,7 +432,6 @@ const formatBalance = (n) => {
     color: #fecaca;
 }
 
-/* --- About modal (Teleport → body, unscoped colors use vars) --- */
 .about-overlay {
     position: fixed;
     inset: 0;

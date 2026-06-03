@@ -1,5 +1,6 @@
 <script setup>
 import { ref, watch, nextTick, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { Panel } from '@vue-flow/core';
 import { ChevronDown, Loader2, SendHorizontal, ImagePlus, X, Settings } from 'lucide-vue-next';
 import aiPromptBrand from '@/assets/aiprompt.png';
@@ -10,6 +11,7 @@ import {
     getActiveStructure,
 } from '@/services/aiFlowNodeStructures.js';
 
+const { t } = useI18n();
 const MAX_CHAT_IMAGES = 3;
 const AI_FLOW_INPUT_K_STORAGE = 'ai_flow_image_input_k';
 
@@ -228,13 +230,13 @@ defineExpose({ reloadStructures });
 
         <div v-else class="ai-flow-card">
             <div class="ai-flow-card-head">
-                <span class="ai-flow-head-title">Ý tưởng</span>
+                <span class="ai-flow-head-title">{{ t('flow.ideaPanelTitle') }}</span>
                 <div class="ai-flow-head-actions">
                     <button
                         type="button"
                         class="ai-flow-head-icon"
-                        aria-label="Cấu trúc sinh node"
-                        title="Cấu trúc sinh node"
+                        :aria-label="t('flow.structureSettingsTitle')"
+                        :title="t('flow.structureSettingsTitle')"
                         @click="onStructureSettingsOpen"
                     >
                         <Settings :size="16" />
@@ -262,7 +264,7 @@ defineExpose({ reloadStructures });
 
             <div ref="threadEl" class="ai-flow-thread custom-scrollbar">
                 <p v-if="!messages.length" class="ai-flow-empty">
-                    Chat với AI; có thể <b>đính ảnh</b> (tối đa {{ MAX_CHAT_IMAGES }}) để AI đọc hình và gợi ý kịch bản. Khi ổn, bấm <b>Tạo node</b>.
+                    <span v-html="t('flow.ideaPanelHint', { max: MAX_CHAT_IMAGES })"></span>
                 </p>
                 <div
                     v-for="m in messages"
@@ -307,7 +309,7 @@ defineExpose({ reloadStructures });
                         type="button"
                         class="ai-flow-attach"
                         :disabled="busy || pendingImages.length >= MAX_CHAT_IMAGES"
-                        title="Đính ảnh (tối đa 3)"
+                        :title="t('flow.attachImages')"
                         @click="triggerFilePick"
                     >
                         <ImagePlus :size="18" />
@@ -339,7 +341,7 @@ defineExpose({ reloadStructures });
                         <option v-for="n in maxImageInputSlots" :key="n" :value="n">{{ n }} ô</option>
                     </select>
                 </label>
-                <span class="ai-flow-opt-hint">Dùng khi bấm Tạo node</span>
+                <span class="ai-flow-opt-hint">{{ t('flow.createNodesHint') }}</span>
             </div>
 
             <button
@@ -349,7 +351,7 @@ defineExpose({ reloadStructures });
                 @click="emitBuild"
             >
                 <Loader2 v-if="busy" :size="14" class="node-gen-spin" />
-                <span v-else>Tạo node lên canvas</span>
+                <span v-else>{{ t('flow.createNodesOnCanvas') }}</span>
             </button>
 
             <p v-if="error" class="ai-flow-err">{{ error }}</p>

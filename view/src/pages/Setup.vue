@@ -1,11 +1,16 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Eye, EyeOff, Settings } from 'lucide-vue-next'
 import { notify } from '@/composables/useNotify.js'
+import { setAppLocale, getAppLocale } from '@/i18n/index.js'
+
+const { t } = useI18n()
 
 const geminiApiKey = ref('')
 const geminiModel = ref('gemini-3-flash-preview')
 const nanoApiKey = ref('')
+const locale = ref(getAppLocale())
 const showGeminiApiKey = ref(false)
 const showNanoApiKey = ref(false)
 const geminiModelOptions = [
@@ -27,6 +32,10 @@ const veoAccounts = ref([
     videoTier: 'ultra',
   }
 ])
+
+watch(locale, (code) => {
+  setAppLocale(code)
+})
 
 const addVeoAccount = () => {
   const nextId = veoAccounts.value.length
@@ -52,6 +61,7 @@ const removeVeoAccount = (id) => {
 
 const saveConfiguration = async () => {
   const payload = {
+    locale: locale.value,
     gemini: {
       apiKey: geminiApiKey.value,
       model: geminiModel.value
@@ -64,6 +74,7 @@ const saveConfiguration = async () => {
   }
 
   localStorage.setItem(STORAGE_KEY, JSON.stringify(payload))
+  setAppLocale(locale.value)
   const nanoSettings = localStorage.getItem(NANO_SETTINGS_KEY)
   const parsedNanoSettings = nanoSettings ? JSON.parse(nanoSettings) : {}
   localStorage.setItem(NANO_SETTINGS_KEY, JSON.stringify({
@@ -77,8 +88,8 @@ const saveConfiguration = async () => {
     videoTier: veoAccounts.value?.[0]?.videoTier === 'pro' ? 'pro' : 'ultra',
   }))
   await notify.alert({
-    title: 'Đã lưu cấu hình',
-    message: 'Cấu hình đã được ghi vào trình duyệt (localStorage).',
+    title: t('setup.savedTitle'),
+    message: t('setup.savedMessage'),
     variant: 'success',
   })
 }
@@ -93,6 +104,10 @@ onMounted(() => {
   try {
     const saved = JSON.parse(savedRaw)
 
+    if (saved?.locale === 'vi' || saved?.locale === 'en') {
+      locale.value = saved.locale
+      setAppLocale(saved.locale)
+    }
     geminiApiKey.value = saved?.gemini?.apiKey || ''
     geminiModel.value = saved?.gemini?.model || 'gemini-3-flash-preview'
     nanoApiKey.value = saved?.nano?.apiKey || ''
@@ -108,7 +123,7 @@ onMounted(() => {
       }))
     }
   } catch (error) {
-    console.error('Khong the doc cau hinh localStorage', error)
+    console.error(t('setup.readConfigError'), error)
   }
 })
 </script>
@@ -118,28 +133,38 @@ onMounted(() => {
     <header class="page-header">
       <div class="title-row">
         <Settings :size="18" class="title-icon" />
-        <h2>Setup</h2>
+        <h2>{{ t('setup.title') }}</h2>
       </div>
-      <p>Quan ly cau hinh he thong va thong tin ket noi cho cac module AI.</p>
+      <p>{{ t('setup.subtitle') }}</p>
     </header>
 
     <form class="setup-form" @submit.prevent>
       <section class="setup-section">
-        <h3>Thiet lap Gemini SDK</h3>
-        <p class="section-note">Cau hinh thong tin ket noi Gemini cho cac tinh nang tao noi dung.</p>
+        <h3>{{ t('setup.language') }}</h3>
+        <p class="section-note">{{ t('setup.languageNote') }}</p>
+        <label for="app-locale">{{ t('setup.language') }}</label>
+        <select id="app-locale" v-model="locale">
+          <option value="en">{{ t('setup.languageEn') }}</option>
+          <option value="vi">{{ t('setup.languageVi') }}</option>
+        </select>
+      </section>
 
-        <label for="gemini-api-key">Gemini API Key</label>
+      <section class="setup-section">
+        <h3>{{ t('setup.geminiSection') }}</h3>
+        <p class="section-note">{{ t('setup.geminiNote') }}</p>
+
+        <label for="gemini-api-key">{{ t('setup.geminiApiKey') }}</label>
         <div class="secret-input-wrap">
           <input
             id="gemini-api-key"
             v-model="geminiApiKey"
             :type="showGeminiApiKey ? 'text' : 'password'"
-            placeholder="Nhap Gemini API Key"
+            :placeholder="t('setup.geminiApiKeyPlaceholder')"
           />
           <button
             type="button"
             class="secret-toggle-btn"
-            :aria-label="showGeminiApiKey ? 'An Gemini API Key' : 'Hien Gemini API Key'"
+            :aria-label="showGeminiApiKey ? t('setup.hideGeminiKey') : t('setup.showGeminiKey')"
             @click="showGeminiApiKey = !showGeminiApiKey"
           >
             <EyeOff v-if="showGeminiApiKey" :size="16" />
@@ -147,7 +172,7 @@ onMounted(() => {
           </button>
         </div>
 
-        <label for="gemini-model">Gemini Model</label>
+        <label for="gemini-model">{{ t('setup.geminiModel') }}</label>
         <select
           id="gemini-model"
           v-model="geminiModel"
@@ -165,23 +190,23 @@ onMounted(() => {
       <section class="setup-section">
         <div class="section-head">
           <div>
-            <h3>Thiet lap tai khoan Veo</h3>
-            <p class="section-note">Moi tai khoan: name, token, cookie labs.google va video tier (Ultra/Pro).</p>
+            <h3>{{ t('setup.veoSection') }}</h3>
+            <p class="section-note">{{ t('setup.veoNote') }}</p>
           </div>
-          <button type="button" class="ghost-btn" @click="addVeoAccount">Them tai khoan</button>
+          <button type="button" class="ghost-btn" @click="addVeoAccount">{{ t('setup.addAccount') }}</button>
         </div>
 
         <div class="account-list">
           <article v-for="(account, index) in veoAccounts" :key="account.id" class="account-card">
             <div class="account-head">
-              <strong>Tai khoan {{ index + 1 }}</strong>
+              <strong>{{ t('setup.accountN', { n: index + 1 }) }}</strong>
               <button
                 v-if="veoAccounts.length > 1"
                 type="button"
                 class="remove-btn"
                 @click="removeVeoAccount(account.id)"
               >
-                Xoa
+                {{ t('common.delete') }}
               </button>
             </div>
 
@@ -190,7 +215,7 @@ onMounted(() => {
               :id="`veo-name-${account.id}`"
               v-model="account.name"
               type="text"
-              placeholder="Ten tai khoan"
+              :placeholder="t('setup.accountNamePlaceholder')"
             />
 
             <label :for="`veo-token-${account.id}`">Token</label>
@@ -198,7 +223,7 @@ onMounted(() => {
               :id="`veo-token-${account.id}`"
               v-model="account.token"
               type="text"
-              placeholder="Nhap token"
+              :placeholder="t('setup.tokenPlaceholder')"
             />
 
             <label :for="`veo-cookie-${account.id}`">Cookie</label>
@@ -206,35 +231,35 @@ onMounted(() => {
               :id="`veo-cookie-${account.id}`"
               v-model="account.cookie"
               rows="3"
-              placeholder="Nhap cookie"
+              :placeholder="t('setup.cookiePlaceholder')"
             />
 
-            <label :for="`veo-tier-${account.id}`">Video tier</label>
+            <label :for="`veo-tier-${account.id}`">{{ t('setup.videoTier') }}</label>
             <select :id="`veo-tier-${account.id}`" v-model="account.videoTier">
-              <option value="ultra">Ultra — modelsV3</option>
-              <option value="pro">Pro — modelsV3Pro</option>
+              <option value="ultra">{{ t('setup.tierUltra') }}</option>
+              <option value="pro">{{ t('setup.tierPro') }}</option>
             </select>
-            <p class="section-note">Mac dinh cho node Sinh video khi dung tai khoan nay (tai khoan 1 = mac dinh he thong).</p>
+            <p class="section-note">{{ t('setup.veoTierNote') }}</p>
           </article>
         </div>
       </section>
 
       <section class="setup-section">
-        <h3>API KEY NANO</h3>
-        <p class="section-note">Su dung cho cac service Nano trong he thong (Google Flow API v3).</p>
+        <h3>{{ t('setup.nanoSection') }}</h3>
+        <p class="section-note">{{ t('setup.nanoNote') }}</p>
 
-        <label for="nano-api-key">Nano API Key</label>
+        <label for="nano-api-key">{{ t('setup.nanoApiKey') }}</label>
         <div class="secret-input-wrap">
           <input
             id="nano-api-key"
             v-model="nanoApiKey"
             :type="showNanoApiKey ? 'text' : 'password'"
-            placeholder="Nhap NANO API Key"
+            :placeholder="t('setup.nanoApiKeyPlaceholder')"
           />
           <button
             type="button"
             class="secret-toggle-btn"
-            :aria-label="showNanoApiKey ? 'An Nano API Key' : 'Hien Nano API Key'"
+            :aria-label="showNanoApiKey ? t('setup.hideNanoKey') : t('setup.showNanoKey')"
             @click="showNanoApiKey = !showNanoApiKey"
           >
             <EyeOff v-if="showNanoApiKey" :size="16" />
@@ -244,7 +269,7 @@ onMounted(() => {
       </section>
 
       <div class="form-actions">
-        <button type="button" class="primary-btn" @click="saveConfiguration">Save Configuration</button>
+        <button type="button" class="primary-btn" @click="saveConfiguration">{{ t('setup.saveConfiguration') }}</button>
       </div>
     </form>
   </section>

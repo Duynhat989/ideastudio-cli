@@ -1,4 +1,7 @@
 import { reactive } from 'vue';
+import { i18n } from '@/i18n/index.js';
+
+const t = (key) => i18n.global.t(key);
 
 const state = reactive({
   open: false,
@@ -7,7 +10,7 @@ const state = reactive({
   message: '',
   variant: 'default',
   confirmText: 'OK',
-  cancelText: 'Hủy',
+  cancelText: '',
   showCancel: false,
   /** @type {null | ((value?: boolean) => void)} */
   resolve: null,
@@ -30,10 +33,10 @@ function alert(options) {
   const o = typeof options === 'string' ? { message: options } : options || {};
   return new Promise((resolve) => {
     state.mode = 'alert';
-    state.title = o.title || 'Thông báo';
+    state.title = o.title || t('common.notification');
     state.message = o.message || '';
     state.variant = o.variant || 'default';
-    state.confirmText = o.confirmText || 'OK';
+    state.confirmText = o.confirmText || t('common.ok');
     state.showCancel = false;
     state.resolve = resolve;
     state.open = true;
@@ -48,11 +51,11 @@ function confirm(options) {
   const o = options || {};
   return new Promise((resolve) => {
     state.mode = 'confirm';
-    state.title = o.title || 'Xác nhận';
+    state.title = o.title || t('common.confirm');
     state.message = o.message || '';
     state.variant = o.variant || 'warning';
-    state.confirmText = o.confirmText || 'Đồng ý';
-    state.cancelText = o.cancelText || 'Hủy';
+    state.confirmText = o.confirmText || t('common.agree');
+    state.cancelText = o.cancelText || t('common.cancel');
     state.showCancel = true;
     state.resolve = resolve;
     state.open = true;

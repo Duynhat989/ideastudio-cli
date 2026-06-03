@@ -2,12 +2,12 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import {
   ArrowLeft,
+  Check,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
-  Film,
   FolderOpen,
-  Image as ImageIcon,
+  ListVideo,
   ListX,
   Loader2,
   Music2,
@@ -35,7 +35,7 @@ const props = defineProps({
 const emit = defineEmits(['back']);
 
 const TRACK_LABEL_WIDTH = 110;
-const TRACK_GAP_PX = 8;
+const TRACK_GAP_PX = 0;
 
 const TEXT_FONT_SIZES = [4, 6, 8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 42, 48, 56, 64, 72, 84, 96];
 const TEXT_COLOR_SWATCHES = [
@@ -91,7 +91,7 @@ const getTextOverlayItemStyle = (clip) => {
     return {
       ...base,
       background: clip.boxColor || '#00000088',
-      border: '1px solid rgba(212,175,55,0.28)',
+      border: '1px solid rgba(250,204,21,0.28)',
       boxShadow: 'none'
     };
   }
@@ -165,6 +165,222 @@ const tracks = ref([
 ]);
 const selectedTrackId = ref('track-1');
 const selectedClip = ref(null);
+const selectedClipIds = ref(new Set());
+const lastClipAnchorId = ref('');
+const marqueeSelect = ref(null);
+const TIMELINE_RULER_HEIGHT = 28;
+const TIMELINE_TRACK_ROW_HEIGHT = 52;
+const TIMELINE_CLIP_TOP = 4;
+const TIMELINE_CLIP_HEIGHT = 44;
+
+const selectedClipCount = computed(() => selectedClipIds.value.size);
+const hasTimelineSelection = computed(() => selectedClipCount.value > 0 || !!selectedClip.value);
+
+const findClipEntry = (clipId) => {
+  for (const track of tracks.value) {
+    const clip = track.clips.find((c) => c.id === clipId);
+    if (clip) return { clip, trackId: track.id };
+  }
+  return null;
+};
+
+const isClipSelected = (clipId) => selectedClipIds.value.has(clipId);
+
+const syncPrimarySelectedClip = () => {
+  const ids = selectedClipIds.value;
+  if (!ids.size) {
+    selectedClip.value = null;
+    return;
+  }
+  if (selectedClip.value && ids.has(selectedClip.value.id)) return;
+  const firstId = [...ids][0];
+  const found = findClipEntry(firstId);
+  selectedClip.value = found?.clip || null;
+  if (found?.trackId) selectedTrackId.value = found.trackId;
+};
+
+const clearClipSelection = () => {
+  selectedClipIds.value = new Set();
+  selectedClip.value = null;
+  lastClipAnchorId.value = '';
+};
+
+const setSingleClipSelection = (clip, trackId) => {
+  selectedClipIds.value = new Set([clip.id]);
+  selectedClip.value = clip;
+  selectedTrackId.value = trackId;
+  lastClipAnchorId.value = clip.id;
+};
+
+const selectTimelineClip = (clip, trackId, e) => {
+  if (!clip) return;
+  selectedTrackId.value = trackId;
+  if (clip.type === 'video' || clip.type === 'image') ensureVisualMediaLayoutFields(clip);
+
+  const additive = e?.metaKey || e?.ctrlKey;
+  const range = e?.shiftKey;
+
+  if (range && lastClipAnchorId.value) {
+    const track = tracks.value.find((t) => t.id === trackId);
+    const anchorIdx = track?.clips.findIndex((c) => c.id === lastClipAnchorId.value) ?? -1;
+    const currentIdx = track?.clips.findIndex((c) => c.id === clip.id) ?? -1;
+    if (track && anchorIdx >= 0 && currentIdx >= 0) {
+      const lo = Math.min(anchorIdx, currentIdx);
+      const hi = Math.max(anchorIdx, currentIdx);
+      const rangeIds = track.clips.slice(lo, hi + 1).map((c) => c.id);
+      if (additive) {
+        const next = new Set(selectedClipIds.value);
+        rangeIds.forEach((id) => next.add(id));
+        selectedClipIds.value = next;
+      } else {
+        selectedClipIds.value = new Set(rangeIds);
+      }
+      selectedClip.value = clip;
+      return;
+    }
+  }
+
+  if (additive) {
+    const next = new Set(selectedClipIds.value);
+    if (next.has(clip.id)) {
+      next.delete(clip.id);
+      selectedClipIds.value = next;
+      syncPrimarySelectedClip();
+    } else {
+      next.add(clip.id);
+      selectedClipIds.value = next;
+      selectedClip.value = clip;
+    }
+    lastClipAnchorId.value = clip.id;
+    return;
+  }
+
+  setSingleClipSelection(clip, trackId);
+};
+
+const clientToTimelineContent = (clientX, clientY) => {
+  const content = timelineContentRef.value;
+  const viewport = timelineViewportRef.value;
+  if (!content || !viewport) return { x: 0, y: 0 };
+  const rect = content.getBoundingClientRect();
+  const vScroll = viewport.parentElement?.scrollTop || 0;
+  return {
+    x: clientX - rect.left + viewport.scrollLeft,
+    y: clientY - rect.top + vScroll,
+  };
+};
+
+const normalizeMarqueeRect = (m) => ({
+  left: Math.min(m.x1, m.x2),
+  top: Math.min(m.y1, m.y2),
+  right: Math.max(m.x1, m.x2),
+  bottom: Math.max(m.y1, m.y2),
+});
+
+const getClipBoundsInContent = (clip, trackIndex) => {
+  const pps = pixelsPerSecond.value;
+  const left = TRACK_LABEL_WIDTH + TRACK_GAP_PX + Number(clip.startTime || 0) * pps;
+  const width = Math.max(56, Number(clip.duration || 0) * pps);
+  const top = TIMELINE_RULER_HEIGHT + trackIndex * TIMELINE_TRACK_ROW_HEIGHT + TIMELINE_CLIP_TOP;
+  return {
+    left,
+    right: left + width,
+    top,
+    bottom: top + TIMELINE_CLIP_HEIGHT,
+  };
+};
+
+const rectsIntersect = (a, b) => !(a.right < b.left || a.left > b.right || a.bottom < b.top || a.top > b.bottom);
+
+const applyMarqueeSelection = (marquee, additive = false) => {
+  const rect = normalizeMarqueeRect(marquee);
+  if (rect.right - rect.left < 2 && rect.bottom - rect.top < 2) return false;
+  const hits = [];
+  tracks.value.forEach((track, trackIndex) => {
+    for (const clip of track.clips) {
+      if (rectsIntersect(getClipBoundsInContent(clip, trackIndex), rect)) {
+        hits.push({ clip, trackId: track.id });
+      }
+    }
+  });
+  const ids = hits.map((h) => h.clip.id);
+  if (additive) {
+    const next = new Set(selectedClipIds.value);
+    ids.forEach((id) => next.add(id));
+    selectedClipIds.value = next;
+  } else {
+    selectedClipIds.value = new Set(ids);
+  }
+  if (hits.length) {
+    const last = hits[hits.length - 1];
+    selectedClip.value = last.clip;
+    selectedTrackId.value = last.trackId;
+    lastClipAnchorId.value = last.clip.id;
+  } else if (!additive) {
+    clearClipSelection();
+  }
+  return true;
+};
+
+const marqueeStyle = computed(() => {
+  const m = marqueeSelect.value;
+  if (!m) return {};
+  const rect = normalizeMarqueeRect(m);
+  return {
+    left: `${rect.left}px`,
+    top: `${rect.top}px`,
+    width: `${Math.max(0, rect.right - rect.left)}px`,
+    height: `${Math.max(0, rect.bottom - rect.top)}px`,
+  };
+});
+
+const startMarqueeSelection = (e) => {
+  const start = clientToTimelineContent(e.clientX, e.clientY);
+  let moved = false;
+  marqueeSelect.value = { x1: start.x, y1: start.y, x2: start.x, y2: start.y };
+  const move = (evt) => {
+    const pt = clientToTimelineContent(evt.clientX, evt.clientY);
+    if (Math.abs(pt.x - start.x) > 3 || Math.abs(pt.y - start.y) > 3) moved = true;
+    marqueeSelect.value = { x1: start.x, y1: start.y, x2: pt.x, y2: pt.y };
+  };
+  const up = (evt) => {
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', up);
+    const current = marqueeSelect.value;
+    marqueeSelect.value = null;
+    const additive = evt.metaKey || evt.ctrlKey;
+    if (moved && current) {
+      applyMarqueeSelection(current, additive);
+      return;
+    }
+    if (!additive) clearClipSelection();
+    setPlayheadFromClientX(evt.clientX);
+  };
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', up);
+};
+
+const onTimelineContentPointerDown = (e) => {
+  if (e.button !== 0) return;
+  if (e.target.closest('.timeline-clip')) return;
+  if (e.target.closest('.track-label')) return;
+  if (e.target.closest('.time-ruler')) return;
+  if (!e.target.closest('.track-lane')) return;
+  startMarqueeSelection(e);
+};
+
+const onRulerPointerDown = (e) => {
+  if (e.button !== 0) return;
+  e.stopPropagation();
+  setPlayheadFromClientX(e.clientX);
+  const move = (evt) => setPlayheadFromClientX(evt.clientX);
+  const up = () => {
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', up);
+  };
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', up);
+};
 const textSizeSelectOptions = computed(() => {
   const sizes = new Set(TEXT_FONT_SIZES);
   const c = selectedClip.value;
@@ -261,6 +477,8 @@ const scrollbarTrackRef = ref(null);
 const scrollbarThumbRef = ref(null);
 
 let raf = null;
+let syncPreviewRaf = null;
+let lastPlayheadScrollAt = 0;
 let draggingScrollbar = false;
 let dragStartX = 0;
 let dragStartScroll = 0;
@@ -273,6 +491,114 @@ const draggingTextId = ref('');
 const resizingTextId = ref('');
 const draggingVisualId = ref('');
 const resizingVisualId = ref('');
+
+const MEDIA_PANEL_MIN = 220;
+const MEDIA_PANEL_MAX = 720;
+const INSPECTOR_PANEL_MIN = 220;
+const INSPECTOR_PANEL_MAX = 720;
+const PLAYER_PANEL_MIN = 280;
+const SPLITTER_TOTAL_PX = 12;
+const LAYOUT_STORAGE_KEY = 'ideastudio-render-layout-v1';
+const mediaPanelWidth = ref(320);
+const inspectorPanelWidth = ref(320);
+const layoutSplitDragging = ref('');
+const layoutWidthsReady = ref(false);
+const editorTopRowRef = ref(null);
+const resourceDurationMap = ref({});
+
+const clampPanelWidth = (value, min, max) => Math.max(min, Math.min(max, Number(value) || min));
+
+const getSidePanelMax = () => {
+  const row = editorTopRowRef.value;
+  if (!row?.clientWidth) return MEDIA_PANEL_MAX;
+  const total = row.clientWidth - SPLITTER_TOTAL_PX;
+  const dynamicMax = Math.max(MEDIA_PANEL_MIN, Math.floor((total - PLAYER_PANEL_MIN) / 2));
+  return Math.min(MEDIA_PANEL_MAX, dynamicMax);
+};
+
+const applyLayoutWidths = (data = {}) => {
+  const max = getSidePanelMax();
+  if (typeof data.mediaPanelWidth === 'number' && Number.isFinite(data.mediaPanelWidth)) {
+    mediaPanelWidth.value = clampPanelWidth(data.mediaPanelWidth, MEDIA_PANEL_MIN, max);
+  }
+  if (typeof data.inspectorPanelWidth === 'number' && Number.isFinite(data.inspectorPanelWidth)) {
+    inspectorPanelWidth.value = clampPanelWidth(data.inspectorPanelWidth, INSPECTOR_PANEL_MIN, max);
+  }
+};
+
+const measureEqualLayout = () => {
+  const row = editorTopRowRef.value;
+  if (!row?.clientWidth) return;
+  const third = Math.floor((row.clientWidth - SPLITTER_TOTAL_PX) / 3);
+  const max = getSidePanelMax();
+  const side = clampPanelWidth(third, MEDIA_PANEL_MIN, max);
+  mediaPanelWidth.value = side;
+  inspectorPanelWidth.value = side;
+};
+
+const saveLayoutToLocal = () => {
+  if (!layoutWidthsReady.value) return;
+  try {
+    localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify({
+      mediaPanelWidth: mediaPanelWidth.value,
+      inspectorPanelWidth: inspectorPanelWidth.value
+    }));
+  } catch {
+    /* ignore */
+  }
+};
+
+const loadLayoutFromLocal = () => {
+  try {
+    const raw = localStorage.getItem(LAYOUT_STORAGE_KEY);
+    if (!raw) return false;
+    applyLayoutWidths(JSON.parse(raw));
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const initLayoutWidths = () => {
+  if (!loadLayoutFromLocal()) measureEqualLayout();
+  layoutWidthsReady.value = true;
+};
+
+const persistLayoutPanels = () => {
+  if (!layoutWidthsReady.value || timelineHydrating) return;
+  saveLayoutToLocal();
+  scheduleTimelineSave();
+};
+
+const startLayoutSplitDrag = (e, kind) => {
+  e.preventDefault();
+  layoutSplitDragging.value = kind;
+  const startX = e.clientX;
+  const startMedia = mediaPanelWidth.value;
+  const startInspector = inspectorPanelWidth.value;
+  const move = (evt) => {
+    const dx = evt.clientX - startX;
+    const max = getSidePanelMax();
+    if (kind === 'media-player') {
+      mediaPanelWidth.value = clampPanelWidth(startMedia + dx, MEDIA_PANEL_MIN, max);
+    } else {
+      inspectorPanelWidth.value = clampPanelWidth(startInspector - dx, INSPECTOR_PANEL_MIN, max);
+    }
+  };
+  const up = () => {
+    layoutSplitDragging.value = '';
+    document.body.classList.remove('render-split-dragging');
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', up);
+    persistLayoutPanels();
+  };
+  document.body.classList.add('render-split-dragging');
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', up);
+};
+
+const onSplitMediaPlayerDown = (e) => startLayoutSplitDrag(e, 'media-player');
+const onSplitPlayerInspectorDown = (e) => startLayoutSplitDrag(e, 'player-inspector');
 
 const isVideo = (url = '') => ['.mp4', '.webm', '.mov', '.mkv'].some((ext) => url.toLowerCase().includes(ext)) || url.includes('video');
 const isAudio = (url = '') =>
@@ -288,6 +614,61 @@ const getResourceThumbName = (url = '') => {
   } catch (_) {
     return String(url);
   }
+};
+
+const truncateMiddleName = (name = '', maxLen = 24) => {
+  const s = String(name || '');
+  if (s.length <= maxLen) return s;
+  const keep = Math.max(4, Math.floor((maxLen - 1) / 2));
+  return `${s.slice(0, keep)}…${s.slice(-keep)}`;
+};
+
+const formatResourceDuration = (seconds) => {
+  const n = Number(seconds);
+  if (!Number.isFinite(n) || n <= 0) return '';
+  const total = Math.floor(n);
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+};
+
+const resourceDurationLabel = (url) => {
+  const cached = resourceDurationMap.value[url] ?? durationCache.get(url);
+  return cached ? formatResourceDuration(cached) : '';
+};
+
+const resourceOnTimeline = computed(() => {
+  const set = new Set();
+  for (const track of tracks.value) {
+    for (const clip of track.clips) {
+      if (typeof clip?.source === 'string' && clip.source.trim()) set.add(clip.source.trim());
+    }
+  }
+  return set;
+});
+
+const syncResourceDurations = async (list = []) => {
+  for (const url of list) {
+    if (resourceDurationMap.value[url] || durationCache.has(url)) {
+      if (durationCache.has(url) && !resourceDurationMap.value[url]) {
+        resourceDurationMap.value = { ...resourceDurationMap.value, [url]: durationCache.get(url) };
+      }
+      continue;
+    }
+    const kind = mediaType(url);
+    if (kind !== 'video' && kind !== 'audio') continue;
+    const duration = await resolveVideoOrAudioDuration(url);
+    if (duration) {
+      resourceDurationMap.value = { ...resourceDurationMap.value, [url]: duration };
+    }
+  }
+};
+
+const onResourceMediaMeta = (url, e) => {
+  const d = Number(e?.target?.duration);
+  if (!Number.isFinite(d) || d <= 0) return;
+  resourceDurationMap.value = { ...resourceDurationMap.value, [url]: d };
+  durationCache.set(url, d);
 };
 const selectedTrack = computed(() => tracks.value.find((t) => t.id === selectedTrackId.value) || tracks.value[0]);
 /** Lane không bị ẩn (Eye) — preview / render chỉ dùng các lane này. */
@@ -308,6 +689,20 @@ const timeMarkers = computed(() => Array.from({ length: Math.ceil(timelineDurati
 const playheadPx = computed(() => TRACK_LABEL_WIDTH + TRACK_GAP_PX + (playhead.value * pixelsPerSecond.value));
 
 const resourceUploadBusy = ref(false);
+const addAllVideosBusy = ref(false);
+const resourceVideoCount = computed(() => resources.value.filter((url) => mediaType(url) === 'video').length);
+const RESOURCE_PANEL_TABS = [
+  { id: 'media', label: 'Media' },
+  { id: 'text', label: 'Text' },
+  { id: 'effect', label: 'Effect' },
+];
+const resourcePanelTab = ref('media');
+const TEXT_CLIP_PRESETS = [
+  { label: 'Tiêu đề', text: 'Tiêu đề video' },
+  { label: 'Phụ đề', text: 'Phụ đề' },
+  { label: 'Chú thích', text: 'Chú thích' },
+  { label: 'Mẫu', text: 'Sample text' },
+];
 
 const assetKindFromFile = (file) => {
   if (file?.type?.startsWith('video/')) return 'video';
@@ -404,8 +799,90 @@ const getDurationFromBackend = async (source) => {
   }
 };
 
-const resolveVideoOrAudioDuration = async (source) =>
-  (await getDurationFromBackend(source)) || (await getDurationFromElement(source));
+const durationCache = new Map();
+const resolveVideoOrAudioDuration = async (source) => {
+  if (durationCache.has(source)) return durationCache.get(source);
+  const duration = (await getDurationFromBackend(source)) || (await getDurationFromElement(source));
+  if (duration) durationCache.set(source, duration);
+  return duration;
+};
+
+const resolveVisualTrackForVideos = () => {
+  const sel = selectedTrack.value;
+  if (sel?.type !== 'audio') return sel;
+  return tracks.value.find((t) => t.type !== 'audio') || sel;
+};
+
+const scrollPlayheadIntoView = () => {
+  const viewport = timelineViewportRef.value;
+  if (!viewport) return;
+  const ph = playheadPx.value;
+  const margin = 96;
+  const left = viewport.scrollLeft;
+  const right = left + viewport.clientWidth;
+  if (ph >= left + margin && ph <= right - margin) return;
+  viewport.scrollLeft = Math.max(0, ph - viewport.clientWidth * 0.42);
+};
+
+const scheduleSyncPreviewToPlayhead = () => {
+  if (syncPreviewRaf != null) return;
+  syncPreviewRaf = requestAnimationFrame(() => {
+    syncPreviewRaf = null;
+    void syncPreviewToPlayhead();
+  });
+};
+
+const addAllVideosToSelectedTrack = async () => {
+  const videos = resources.value.filter((url) => mediaType(url) === 'video');
+  if (!videos.length) {
+    await notify.alert({
+      title: 'Không có video',
+      message: 'Không tìm thấy video nào trong Resources.',
+      variant: 'warning',
+    });
+    return;
+  }
+  const track = resolveVisualTrackForVideos();
+  if (!track) return;
+  addAllVideosBusy.value = true;
+  selectedTrackId.value = track.id;
+  try {
+    let cursor = track.clips.length
+      ? Math.max(...track.clips.map((c) => Number(c.startTime || 0) + Number(c.duration || 0)))
+      : 0;
+    const metaList = await Promise.all(videos.map(async (url) => ({
+      url,
+      duration: await resolveVideoOrAudioDuration(url),
+      dims: await probeMediaDimensions(url)
+    })));
+    const newClips = metaList.map(({ url, duration, dims }) => {
+      const clip = {
+        id: generateId(),
+        source: url,
+        type: 'video',
+        startTime: cursor,
+        duration: duration || defaultDurationByType('video'),
+        trimStart: 0,
+        muted: false
+      };
+      if (dims.w > 0 && dims.h > 0) clip.mediaAspect = dims.w / dims.h;
+      fitLayoutContainInFrame(clip);
+      cursor += Number(clip.duration || 0);
+      return clip;
+    });
+    track.clips.push(...newClips);
+    requestAnimationFrame(updateScrollbarThumb);
+    scheduleTimelineSave();
+  } catch (err) {
+    await notify.alert({
+      title: 'Không thể thêm video',
+      message: err?.message || 'Thêm video vào track thất bại.',
+      variant: 'error',
+    });
+  } finally {
+    addAllVideosBusy.value = false;
+  }
+};
 
 const normalizeClipStart = (track, clip, desiredStart) => {
   const sorted = track.clips.filter((c) => c.id !== clip.id).slice().sort((a, b) => a.startTime - b.startTime);
@@ -474,23 +951,29 @@ const deleteSelectedTrack = () => {
   const idx = tracks.value.findIndex((t) => t.id === selectedTrackId.value);
   if (idx === -1) return;
   const removed = tracks.value[idx];
-  if (selectedClip.value && removed.clips.some((c) => c.id === selectedClip.value?.id)) selectedClip.value = null;
+  if (selectedClip.value && removed.clips.some((c) => c.id === selectedClip.value?.id)) clearClipSelection();
+  else {
+    const next = new Set(selectedClipIds.value);
+    removed.clips.forEach((c) => next.delete(c.id));
+    selectedClipIds.value = next;
+    syncPrimarySelectedClip();
+  }
   tracks.value.splice(idx, 1);
   const next = tracks.value[Math.min(idx, tracks.value.length - 1)] || tracks.value[0];
   selectedTrackId.value = next?.id || 'track-1';
   requestAnimationFrame(updateScrollbarThumb);
 };
 
-const addTextClip = () => {
+const addTextClip = (options = {}) => {
   const track = selectedTrack.value;
   const tail = track.clips.length ? Math.max(...track.clips.map((c) => c.startTime + c.duration)) : 0;
-  track.clips.push({
+  const clip = {
     id: generateId(),
     type: 'text',
-    text: 'Sample text',
+    text: options.text || 'Sample text',
     color: '#ffffff',
     boxColor: '#00000088',
-    fontSize: 48,
+    fontSize: Number(options.fontSize) || 48,
     textBoxWidthPercent: 40,
     textStyle: 'fill',
     strokeWidth: 2,
@@ -502,22 +985,32 @@ const addTextClip = () => {
     duration: 3,
     trimStart: 0,
     muted: true
-  });
+  };
+  track.clips.push(clip);
+  setSingleClipSelection(clip, track.id);
+  inspectorOpen.value = true;
 };
 const removeResource = (index) => resources.value.splice(index, 1);
 const removeClip = (trackId, clipId) => {
   const track = tracks.value.find((t) => t.id === trackId);
   if (!track) return;
   track.clips = track.clips.filter((c) => c.id !== clipId);
-  if (selectedClip.value?.id === clipId) selectedClip.value = null;
+  const next = new Set(selectedClipIds.value);
+  next.delete(clipId);
+  selectedClipIds.value = next;
+  syncPrimarySelectedClip();
 };
 
 const deleteSelectedClip = () => {
-  const clip = selectedClip.value;
-  if (!clip) return;
-  const track = tracks.value.find((t) => t.clips.some((c) => c.id === clip.id));
-  if (!track) return;
-  removeClip(track.id, clip.id);
+  const ids = selectedClipIds.value.size
+    ? [...selectedClipIds.value]
+    : (selectedClip.value ? [selectedClip.value.id] : []);
+  if (!ids.length) return;
+  const idSet = new Set(ids);
+  for (const track of tracks.value) {
+    track.clips = track.clips.filter((c) => !idSet.has(c.id));
+  }
+  clearClipSelection();
 };
 
 const onDragStartResource = (e, index) => e.dataTransfer.setData('text/resource-index', String(index));
@@ -549,7 +1042,7 @@ const moveClipToTrack = (payload, event, targetTrackId) => {
     clip.startTime = normalizeClipStart(targetTrack, clip, desired);
   }
   selectedTrackId.value = targetTrack.id;
-  selectedClip.value = clip;
+  setSingleClipSelection(clip, targetTrack.id);
 };
 const onDropTrack = (e, trackId) => {
   e.preventDefault();
@@ -569,7 +1062,7 @@ const allowDrop = (e) => e.preventDefault();
 
 const getClipStyle = (clip) => ({
   left: `${clip.startTime * pixelsPerSecond.value}px`,
-  width: `${Math.max(44, clip.duration * pixelsPerSecond.value)}px`
+  width: `${Math.max(56, clip.duration * pixelsPerSecond.value)}px`
 });
 
 /** Mọi clip video/ảnh đang giao với playhead, theo thứ tự lane (track 0 = trên cùng UI → z-index cao nhất). */
@@ -780,8 +1273,10 @@ const syncPreviewToPlayhead = async () => {
     const rel = Math.max(0, playhead.value - clip.startTime + Number(clip.trimStart || 0));
     const duration = el.duration || 0;
     const target = duration > 0 ? Math.min(duration, rel) : rel;
-    if (!isPlaying.value || el.paused) el.currentTime = target;
-    if (isPlaying.value) el.play().catch(() => {});
+    if (Math.abs(el.currentTime - target) > 0.045) {
+      el.currentTime = target;
+    }
+    if (isPlaying.value && el.paused) el.play().catch(() => {});
   }
 
   const audioClip = activeAudioClip.value;
@@ -796,15 +1291,20 @@ const syncPreviewToPlayhead = async () => {
     const rel = Math.max(0, playhead.value - audioClip.startTime + Number(audioClip.trimStart || 0));
     const dur = el.duration || 0;
     const target = dur > 0 ? Math.min(dur, rel) : rel;
-    if (!isPlaying.value || el.paused) el.currentTime = target;
-    if (isPlaying.value) el.play().catch(() => {});
+    if (Math.abs(el.currentTime - target) > 0.045) {
+      el.currentTime = target;
+    }
+    if (isPlaying.value && el.paused) el.play().catch(() => {});
   } else {
     previewAudioRef.value?.pause();
   }
 };
-watch(playhead, () => { syncPreviewToPlayhead(); }, { flush: 'post' });
-watch(activeVisualLayers, () => { syncPreviewToPlayhead(); }, { deep: true, flush: 'post' });
-watch(activeAudioClip, () => { syncPreviewToPlayhead(); }, { flush: 'post' });
+watch(playhead, () => {
+  if (isPlaying.value) return;
+  scheduleSyncPreviewToPlayhead();
+}, { flush: 'post' });
+watch(activeVisualLayers, () => { scheduleSyncPreviewToPlayhead(); }, { deep: true, flush: 'post' });
+watch(activeAudioClip, () => { scheduleSyncPreviewToPlayhead(); }, { flush: 'post' });
 
 const onPreviewTimeUpdate = () => {
   const visual = masterPreviewVideoClip.value;
@@ -850,6 +1350,12 @@ const playbackTick = () => {
     return;
   }
   playhead.value = next;
+  const now = performance.now();
+  if (now - lastPlayheadScrollAt > 180) {
+    lastPlayheadScrollAt = now;
+    scrollPlayheadIntoView();
+    requestAnimationFrame(updateScrollbarThumb);
+  }
   raf = requestAnimationFrame(playbackTick);
 };
 const togglePreviewPlay = async () => {
@@ -873,16 +1379,7 @@ const setPlayheadFromClientX = (clientX) => {
   const laneX = rawX - TRACK_LABEL_WIDTH - TRACK_GAP_PX;
   if (laneX < 0) return;
   playhead.value = Math.max(0, Math.min(timelineDuration.value, laneX / pixelsPerSecond.value));
-};
-const onTimelinePointerDown = (e) => {
-  setPlayheadFromClientX(e.clientX);
-  const move = (evt) => setPlayheadFromClientX(evt.clientX);
-  const up = () => {
-    window.removeEventListener('pointermove', move);
-    window.removeEventListener('pointerup', up);
-  };
-  window.addEventListener('pointermove', move);
-  window.addEventListener('pointerup', up);
+  scheduleSyncPreviewToPlayhead();
 };
 const onTimelineWheel = (e) => {
   if (!e.ctrlKey) return;
@@ -890,17 +1387,14 @@ const onTimelineWheel = (e) => {
   const step = 6;
   zoom.value = Math.max(TIMELINE_ZOOM_MIN, Math.min(TIMELINE_ZOOM_MAX, zoom.value + (e.deltaY < 0 ? step : -step)));
 };
-const onClipPointerDown = (_e, clip, trackId) => {
-  selectedClip.value = clip;
-  selectedTrackId.value = trackId;
-  if (clip.type === 'video' || clip.type === 'image') ensureVisualMediaLayoutFields(clip);
+const onClipPointerDown = (e, clip, trackId) => {
+  selectTimelineClip(clip, trackId, e);
 };
 
 const onTextOverlayPointerDown = (e, clip) => {
   if (resizingTextId.value || draggingVisualId.value || resizingVisualId.value) return;
   if (!previewFrameRef.value) return;
-  selectedClip.value = clip;
-  selectedTrackId.value = tracks.value.find((t) => t.clips.some((c) => c.id === clip.id))?.id || selectedTrackId.value;
+  setSingleClipSelection(clip, tracks.value.find((t) => t.clips.some((c) => c.id === clip.id))?.id || selectedTrackId.value);
   inspectorOpen.value = true;
   draggingTextId.value = clip.id;
   const move = (evt) => {
@@ -923,8 +1417,7 @@ const onTextOverlayPointerDown = (e, clip) => {
 const onTextResizePointerDown = (e, clip) => {
   if (draggingVisualId.value || resizingVisualId.value) return;
   if (!previewFrameRef.value) return;
-  selectedClip.value = clip;
-  selectedTrackId.value = tracks.value.find((t) => t.clips.some((c) => c.id === clip.id))?.id || selectedTrackId.value;
+  setSingleClipSelection(clip, tracks.value.find((t) => t.clips.some((c) => c.id === clip.id))?.id || selectedTrackId.value);
   inspectorOpen.value = true;
   resizingTextId.value = clip.id;
   const startX = e.clientX;
@@ -950,8 +1443,7 @@ const onVisualOverlayPointerDown = (e, clip) => {
   if (!previewFrameRef.value || !clip) return;
   if (clip.type !== 'video' && clip.type !== 'image') return;
   ensureVisualMediaLayoutFields(clip);
-  selectedClip.value = clip;
-  selectedTrackId.value = tracks.value.find((t) => t.clips.some((c) => c.id === clip.id))?.id || selectedTrackId.value;
+  setSingleClipSelection(clip, tracks.value.find((t) => t.clips.some((c) => c.id === clip.id))?.id || selectedTrackId.value);
   inspectorOpen.value = true;
   draggingVisualId.value = clip.id;
   const startX = e.clientX;
@@ -982,8 +1474,7 @@ const onVisualResizePointerDown = (e, clip) => {
   if (!previewFrameRef.value || !clip) return;
   if (clip.type !== 'video' && clip.type !== 'image') return;
   ensureVisualMediaLayoutFields(clip);
-  selectedClip.value = clip;
-  selectedTrackId.value = tracks.value.find((t) => t.clips.some((c) => c.id === clip.id))?.id || selectedTrackId.value;
+  setSingleClipSelection(clip, tracks.value.find((t) => t.clips.some((c) => c.id === clip.id))?.id || selectedTrackId.value);
   inspectorOpen.value = true;
   resizingVisualId.value = clip.id;
   const startX = e.clientX;
@@ -1085,11 +1576,10 @@ const splitAtPlayhead = () => {
   const second = { ...clip, id: generateId(), startTime: split, duration: clip.duration - cut, trimStart: Number(clip.trimStart || 0) + cut };
   track.clips = track.clips.filter((c) => c.id !== clip.id);
   track.clips.push(first, second);
-  selectedClip.value = second;
+  setSingleClipSelection(second, track.id);
 };
 const openInspectorForClip = (clip, trackId) => {
-  selectedTrackId.value = trackId;
-  selectedClip.value = clip;
+  setSingleClipSelection(clip, trackId);
   ensureTextClipFields(clip);
   ensureVisualMediaLayoutFields(clip);
   inspectorOpen.value = true;
@@ -1182,6 +1672,8 @@ const timelineSerialize = () => ({
   zoom: zoom.value,
   playhead: playhead.value,
   selectedTrackId: selectedTrackId.value,
+  mediaPanelWidth: mediaPanelWidth.value,
+  inspectorPanelWidth: inspectorPanelWidth.value,
   resources: resources.value.slice(),
   tracks: tracks.value.map((t) => ({
     id: t.id,
@@ -1223,6 +1715,10 @@ const applyLoadedTimeline = async (data) => {
     if (typeof data.selectedTrackId === 'string' && tracks.value.some((t) => t.id === data.selectedTrackId)) {
       selectedTrackId.value = data.selectedTrackId;
     }
+    if (typeof data.mediaPanelWidth === 'number' || typeof data.inspectorPanelWidth === 'number') {
+      applyLayoutWidths(data);
+      layoutWidthsReady.value = true;
+    }
     for (const t of tracks.value) {
       for (const c of t.clips) {
         if (c.type === 'text') ensureTextClipFields(c);
@@ -1255,6 +1751,7 @@ const scheduleTimelineSave = () => {
 const loadTimelineFromBackend = async () => {
   if (!props.projectId) return;
   timelineReady = false;
+  layoutWidthsReady.value = false;
   try {
     const res = await projectService.getTimeline(props.projectId);
     if (res?.success && res.data) await applyLoadedTimeline(res.data);
@@ -1262,6 +1759,7 @@ const loadTimelineFromBackend = async () => {
     /* ignore */
   } finally {
     void nextTick(() => {
+      if (!layoutWidthsReady.value) initLayoutWidths();
       timelineReady = true;
     });
   }
@@ -1337,11 +1835,26 @@ const onRenderModalOverlayClick = () => {
 };
 
 const chooseRenderOutputPath = async () => {
-  const result = await window.electronAPI.invoke('dialog:save-video-path', {
-    defaultName: `render-${Date.now()}.mp4`
-  });
-  if (result?.success && result.filePath) {
-    renderOutputPath.value = result.filePath;
+  try {
+    const result = await window.electronAPI.invoke('dialog:save-video-path', {
+      defaultName: `render-${Date.now()}.mp4`
+    });
+    if (result?.canceled) return;
+    if (result?.success && result.filePath) {
+      renderOutputPath.value = result.filePath;
+      return;
+    }
+    await notify.alert({
+      title: 'Không thể chọn file',
+      message: result?.message || 'Hộp thoại lưu file không khả dụng trên hệ thống này.',
+      variant: 'error',
+    });
+  } catch (err) {
+    await notify.alert({
+      title: 'Không thể chọn file',
+      message: err?.message || 'Lỗi khi mở hộp thoại lưu file.',
+      variant: 'error',
+    });
   }
 };
 
@@ -1453,6 +1966,12 @@ watch(
   { deep: true }
 );
 
+watch(
+  resources,
+  (list) => { void syncResourceDurations(list); },
+  { immediate: true, deep: true }
+);
+
 watch(aspectRatio, () => {
   for (const t of tracks.value) {
     for (const c of t.clips) {
@@ -1471,12 +1990,16 @@ onMounted(() => {
   const viewport = timelineViewportRef.value;
   if (viewport) viewport.addEventListener('scroll', updateScrollbarThumb, { passive: true });
   requestAnimationFrame(updateScrollbarThumb);
+  void nextTick(() => {
+    if (!layoutWidthsReady.value) initLayoutWidths();
+  });
 });
 onBeforeUnmount(() => {
   clearRenderPoll();
   clearTimeout(timelineSaveTimer);
   timelineSaveTimer = null;
   if (raf) cancelAnimationFrame(raf);
+  if (syncPreviewRaf) cancelAnimationFrame(syncPreviewRaf);
   Object.values(previewVideoEls.value).forEach((el) => el?.pause());
   previewAudioRef.value?.pause();
   const viewport = timelineViewportRef.value;
@@ -1501,44 +2024,141 @@ onBeforeUnmount(() => {
       </div>
     </header>
 
+    <div class="editor-layout-wrap">
     <div class="editor-layout">
-      <aside class="resources-panel">
-        <div class="panel-title">Resources</div>
-        <label class="upload-btn" :class="{ 'upload-btn--busy': resourceUploadBusy }">
-          <Loader2 v-if="resourceUploadBusy" :size="14" class="upload-spin" />
-          <Plus v-else :size="14" />
-          <span>{{ resourceUploadBusy ? 'Đang upload…' : 'Add image/video/audio' }}</span>
-          <input
-            type="file"
-            multiple
-            accept="image/*,video/*,audio/*"
-            :disabled="resourceUploadBusy"
-            @change="onAddExternalFiles"
-          />
-        </label>
-        <div class="resource-list">
-          <div v-for="(url, idx) in resources" :key="idx" class="resource-item" draggable="true" @dragstart="onDragStartResource($event, idx)">
-            <div class="resource-thumb">
-              <video v-if="mediaType(url)==='video'" :src="url" muted />
-              <div v-else-if="mediaType(url)==='audio'" class="audio-box"><Music2 :size="16" /> Audio</div>
-              <img v-else :src="url" />
-            </div>
-            <div class="resource-main">
-              <div class="resource-name" :title="getResourceThumbName(url)">
-                {{ getResourceThumbName(url) }}
-              </div>
-              <div class="resource-type">{{ mediaType(url) }}</div>
-            </div>
-            <div class="resource-actions">
-              <button @click="addClipToTrack(url, selectedTrack.id)"><Play :size="12" /></button>
-              <button @click="removeResource(idx)"><Trash2 :size="12" /></button>
-            </div>
+      <div class="editor-top-row" ref="editorTopRowRef">
+      <aside class="resources-panel cap-panel" :style="{ width: `${mediaPanelWidth}px` }">
+        <div class="resources-panel-head">
+          <button
+            v-for="tab in RESOURCE_PANEL_TABS"
+            :key="tab.id"
+            type="button"
+            class="resources-tab"
+            :class="{ 'resources-tab--active': resourcePanelTab === tab.id }"
+            @click="resourcePanelTab = tab.id"
+          >
+            {{ tab.label }}
+            <span v-if="tab.id === 'media' && resources.length" class="resources-tab-badge">{{ resources.length }}</span>
+          </button>
+        </div>
+        <div class="resources-body">
+          <template v-if="resourcePanelTab === 'media'">
+          <div class="resources-toolbar">
+            <label class="upload-btn cap-import-btn" :class="{ 'upload-btn--busy': resourceUploadBusy }">
+              <Loader2 v-if="resourceUploadBusy" :size="12" class="upload-spin" />
+              <Plus v-else :size="12" />
+              <span>{{ resourceUploadBusy ? 'Upload…' : 'Import' }}</span>
+              <input
+                type="file"
+                multiple
+                accept="image/*,video/*,audio/*"
+                :disabled="resourceUploadBusy"
+                @change="onAddExternalFiles"
+              />
+            </label>
+            <button
+              type="button"
+              class="add-all-videos-btn"
+              :class="{ 'add-all-videos-btn--busy': addAllVideosBusy }"
+              :disabled="addAllVideosBusy || resourceVideoCount === 0"
+              :title="resourceVideoCount ? `Thêm ${resourceVideoCount} video vào ${selectedTrack?.name || 'track'} (nối liền theo thứ tự)` : 'Không có video trong Resources'"
+              @click="addAllVideosToSelectedTrack"
+            >
+              <Loader2 v-if="addAllVideosBusy" :size="12" class="upload-spin" />
+              <ListVideo v-else :size="12" />
+              <span>{{ addAllVideosBusy ? 'Đang thêm…' : 'Tất cả video' }}</span>
+            </button>
           </div>
+          <div class="resource-grid">
+            <div
+              v-for="(url, idx) in resources"
+              :key="`${idx}-${url}`"
+              class="media-item"
+              draggable="true"
+              @dragstart="onDragStartResource($event, idx)"
+              @dblclick="addClipToTrack(url, selectedTrack.id)"
+            >
+              <div class="media-item-thumb">
+                <video
+                  v-if="mediaType(url)==='video'"
+                  :src="url"
+                  muted
+                  preload="metadata"
+                  @loadedmetadata="onResourceMediaMeta(url, $event)"
+                />
+                <div v-else-if="mediaType(url)==='audio'" class="media-item-audio">
+                  <Music2 :size="22" />
+                </div>
+                <img v-else :src="url" alt="" />
+                <span v-if="resourceOnTimeline.has(url)" class="media-item-added">
+                  <Check :size="10" stroke-width="3" />
+                  Added
+                </span>
+                <span v-if="resourceDurationLabel(url)" class="media-item-duration">{{ resourceDurationLabel(url) }}</span>
+                <div class="media-item-actions">
+                  <button type="button" class="media-item-action" title="Thêm vào track" @click.stop="addClipToTrack(url, selectedTrack.id)">
+                    <Plus :size="11" />
+                  </button>
+                  <button type="button" class="media-item-action media-item-action--danger" title="Xóa" @click.stop="removeResource(idx)">
+                    <Trash2 :size="11" />
+                  </button>
+                </div>
+              </div>
+              <div class="media-item-name" :title="getResourceThumbName(url)">
+                {{ truncateMiddleName(getResourceThumbName(url)) }}
+              </div>
+            </div>
+            <div v-if="!resources.length" class="resource-empty">Kéo thả hoặc Import media</div>
+          </div>
+          </template>
+
+          <template v-else-if="resourcePanelTab === 'text'">
+            <div class="resource-tab-pane">
+              <button type="button" class="resource-pane-action" @click="addTextClip()">
+                <Plus :size="12" />
+                <span>Thêm text vào track</span>
+              </button>
+              <div class="text-preset-grid">
+                <button
+                  v-for="preset in TEXT_CLIP_PRESETS"
+                  :key="preset.label"
+                  type="button"
+                  class="text-preset-card"
+                  @click="addTextClip({ text: preset.text })"
+                >
+                  <span class="text-preset-preview">{{ preset.text }}</span>
+                  <span class="text-preset-label">{{ preset.label }}</span>
+                </button>
+              </div>
+            </div>
+          </template>
+
+          <template v-else>
+            <div class="resource-tab-pane resource-tab-pane--empty">
+              <WandSparkles :size="22" class="resource-tab-empty-icon" />
+              <p class="resource-tab-empty-title">Effect</p>
+              <p class="resource-tab-empty-sub">Hiệu ứng sẽ được bổ sung trong bản cập nhật sau.</p>
+            </div>
+          </template>
         </div>
       </aside>
 
-      <main class="workspace-top">
-        <div class="preview-panel">
+      <div
+        class="layout-splitter layout-splitter--vertical"
+        :class="{ 'is-active': layoutSplitDragging === 'media-player' }"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize Media and Player"
+        title="Kéo để đổi kích thước Media / Player"
+        @pointerdown="onSplitMediaPlayerDown"
+      ></div>
+
+      <main class="player-panel cap-panel">
+        <div class="cap-panel-head player-head">
+          <span class="cap-panel-title">Player</span>
+          <span class="player-time">{{ formatTimeHms(playhead) }} / {{ formatTimeHms(contentDuration || timelineDuration) }}</span>
+        </div>
+        <div class="player-body">
           <div class="preview-stage">
             <div class="preview-aspect-host">
               <div
@@ -1556,7 +2176,7 @@ onBeforeUnmount(() => {
                       :key="layer.clip.id"
                       class="visual-layout-box"
                       :class="{
-                        selected: selectedClip?.id === layer.clip.id,
+                        selected: isClipSelected(layer.clip.id),
                         'is-dragging': draggingVisualId === layer.clip.id,
                         'is-resizing': resizingVisualId === layer.clip.id
                       }"
@@ -1583,7 +2203,7 @@ onBeforeUnmount(() => {
                       ></span>
                     </div>
                   </div>
-                  <div v-show="!activeVisualLayers.length" class="preview-empty">No preview clip at this playhead</div>
+                  <div v-show="!activeVisualLayers.length" class="preview-empty">Chưa có clip tại playhead</div>
                   <div class="text-overlay-layer">
                     <div
                       v-for="clip in activeTextClips"
@@ -1600,9 +2220,34 @@ onBeforeUnmount(() => {
               </div>
             </div>
           </div>
-          <aside class="inspector-panel" :class="{ empty: !(inspectorOpen && selectedClip) }">
-            <h4>Item Properties</h4>
-            <div v-if="inspectorOpen && selectedClip" class="inspector-grid">
+          <div class="player-controls">
+            <button class="player-play-btn" type="button" @click="togglePreviewPlay" :title="isPlaying ? 'Pause' : 'Play'">
+              <Pause v-if="isPlaying" :size="18" />
+              <Play v-else :size="18" />
+            </button>
+          </div>
+        </div>
+      </main>
+
+      <div
+        class="layout-splitter layout-splitter--vertical"
+        :class="{ 'is-active': layoutSplitDragging === 'player-inspector' }"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize Player and Properties"
+        title="Kéo để đổi kích thước Player / Properties"
+        @pointerdown="onSplitPlayerInspectorDown"
+      ></div>
+
+      <aside class="inspector-panel cap-panel" :style="{ width: `${inspectorPanelWidth}px` }" :class="{ empty: !(inspectorOpen && selectedClip) }">
+        <div class="cap-panel-head">
+          <span class="cap-panel-title">Properties</span>
+        </div>
+        <div class="inspector-body">
+          <div v-if="selectedClipCount > 1" class="inspector-multi-hint">
+            {{ selectedClipCount }} clip đang chọn — Properties hiển thị clip cuối cùng được chọn.
+          </div>
+          <div v-if="inspectorOpen && selectedClip" class="inspector-grid">
               <label>Start</label>
               <input type="number" min="0" step="0.1" v-model.number="selectedClip.startTime" @input="onInspectorChange" />
               <label>Duration</label>
@@ -1735,76 +2380,75 @@ onBeforeUnmount(() => {
                 </div>
               </template>
             </div>
-            <div v-else class="inspector-empty">Double-click an item to edit</div>
-          </aside>
-        </div>
+            <div v-else class="inspector-empty">Double-click clip để chỉnh thuộc tính</div>
+          </div>
+      </aside>
+      </div>
 
-      </main>
-      <section class="workspace-bottom">
+      <section class="workspace-bottom cap-panel">
         <div class="timeline-toolbar">
           <div class="timeline-toolbar-side timeline-toolbar-left">
+            <button class="cap-tool-btn" type="button" @click="togglePreviewPlay" :title="isPlaying ? 'Pause' : 'Play'">
+              <Pause v-if="isPlaying" :size="15" />
+              <Play v-else :size="15" />
+            </button>
+            <span class="cap-toolbar-divider" aria-hidden="true"></span>
+            <button
+              class="cap-tool-btn"
+              type="button"
+              @click="splitAtPlayhead"
+              :disabled="!hasTimelineSelection"
+              title="Tách clip tại playhead"
+            >
+              <Scissors :size="15" />
+            </button>
+            <button
+              class="cap-tool-btn"
+              type="button"
+              @click="deleteSelectedClip"
+              :disabled="!hasTimelineSelection"
+              title="Xóa clip đang chọn"
+            >
+              <Trash2 :size="15" />
+            </button>
+            <button class="cap-tool-btn" type="button" @click="addTextClip" title="Thêm text">T</button>
+            <button
+              class="cap-tool-btn"
+              type="button"
+              @click="addTrackAboveSelection"
+              title="Thêm track phía trên"
+            >
+              <ChevronUp :size="15" />
+            </button>
+            <button
+              class="cap-tool-btn"
+              type="button"
+              @click="addTrackBelowSelection"
+              title="Thêm track phía dưới"
+            >
+              <ChevronDown :size="15" />
+            </button>
+            <button
+              class="cap-tool-btn"
+              type="button"
+              @click="deleteSelectedTrack"
+              :disabled="tracks.length <= 1"
+              title="Xóa track"
+            >
+              <ListX :size="15" />
+            </button>
+          </div>
+          <div class="timeline-toolbar-side timeline-toolbar-right">
+            <span class="time-view">{{ formatTimeHms(playhead) }}</span>
             <label class="zoom-label">Zoom</label>
             <input
-              class="zoom-range"
+              class="zoom-range cap-range"
               type="range"
               :min="TIMELINE_ZOOM_MIN"
               :max="TIMELINE_ZOOM_MAX"
               step="1"
               v-model.number="zoom"
             />
-            <button
-              class="tool-btn ghost small timeline-add-track-btn"
-              type="button"
-              @click="addTrackAboveSelection"
-              title="Thêm track phía trên lane đang chọn"
-            >
-              <ChevronUp :size="14" />
-            </button>
-            <button
-              class="tool-btn ghost small timeline-add-track-btn"
-              type="button"
-              @click="addTrackBelowSelection"
-              title="Thêm track phía dưới lane đang chọn"
-            >
-              <ChevronDown :size="14" />
-            </button>
-            <button class="tool-btn ghost small" type="button" @click="addTextClip">+ Text</button>
-            <button
-              class="tool-btn ghost small timeline-icon-btn"
-              type="button"
-              @click="splitAtPlayhead"
-              :disabled="!selectedClip"
-              title="Tách clip tại playhead"
-            >
-              <Scissors :size="14" />
-            </button>
-            <button
-              class="tool-btn ghost small timeline-icon-btn"
-              type="button"
-              @click="deleteSelectedClip"
-              :disabled="!selectedClip"
-              title="Xóa clip đang chọn"
-            >
-              <Trash2 :size="14" />
-            </button>
-            <button
-              class="tool-btn ghost small timeline-icon-btn"
-              type="button"
-              @click="deleteSelectedTrack"
-              :disabled="tracks.length <= 1"
-              title="Xóa lane đang chọn (mọi clip trong lane)"
-            >
-              <ListX :size="14" />
-            </button>
-          </div>
-          <div class="timeline-toolbar-center">
-            <button class="tool-btn ghost small timeline-play-btn" type="button" @click="togglePreviewPlay" :title="isPlaying ? 'Pause preview' : 'Play preview'">
-              <Play v-if="!isPlaying" :size="16" />
-              <Pause v-else :size="16" />
-            </button>
-          </div>
-          <div class="timeline-toolbar-side timeline-toolbar-right">
-            <span class="time-view">{{ formatTimeHms(playhead) }} / {{ formatTimeHms(timelineDuration) }}</span>
           </div>
         </div>
 
@@ -1814,14 +2458,24 @@ onBeforeUnmount(() => {
               <div
                 ref="timelineViewportRef"
                 class="timeline-view-h"
-                @pointerdown="onTimelinePointerDown"
                 @wheel="onTimelineWheel"
               >
-                <div ref="timelineContentRef" class="timeline-content" :style="{ width: `${timelineInnerWidth}px` }">
-                  <div class="time-ruler">
+                <div
+                  ref="timelineContentRef"
+                  class="timeline-content"
+                  :style="{ width: `${timelineInnerWidth}px` }"
+                  @pointerdown="onTimelineContentPointerDown"
+                >
+                  <div class="time-ruler" @pointerdown="onRulerPointerDown">
                     <div class="ruler-label-spacer"></div>
-                    <div class="ruler-scale" :style="{ width: `${timelineWidth}px` }">
-                      <div v-for="sec in timeMarkers" :key="sec" class="tick" :style="{ left: `${(sec / timelineDuration) * 100}%` }">{{ sec.toFixed(0) }}s</div>
+                    <div class="ruler-scale" :style="{ width: `${timelineWidth}px`, '--tick-step-px': `${5 * pixelsPerSecond}px` }">
+                      <div
+                        v-for="sec in timeMarkers"
+                        :key="sec"
+                        class="tick"
+                        :class="{ 'tick--origin': sec === 0 }"
+                        :style="{ left: `${sec * pixelsPerSecond}px` }"
+                      >{{ sec.toFixed(0) }}s</div>
                     </div>
                   </div>
 
@@ -1858,34 +2512,39 @@ onBeforeUnmount(() => {
                         :key="clip.id"
                         class="timeline-clip"
                         draggable="true"
-                        :class="{ selected: selectedClip?.id === clip.id }"
+                        :class="{
+                          selected: isClipSelected(clip.id),
+                          [`timeline-clip--${clip.type}`]: true
+                        }"
                         :style="getClipStyle(clip)"
                         @pointerdown.stop="onClipPointerDown($event, clip, track.id)"
-                        @mousedown.stop="onClipPointerDown($event, clip, track.id)"
-                        @click.stop="selectedClip = clip; selectedTrackId = track.id"
                         @dblclick.stop="openInspectorForClip(clip, track.id)"
                         @dragstart="onDragStartClip($event, clip, track.id)"
                       >
-                        <Film v-if="clip.type === 'video'" :size="12" />
-                        <Music2 v-else-if="clip.type === 'audio'" :size="12" />
-                        <ImageIcon v-else :size="12" />
-                        <span class="clip-name">{{ clip.type }}</span>
-                        <span class="clip-meta">{{ clip.startTime.toFixed(1) }}s | {{ clip.duration.toFixed(1) }}s</span>
-                        <button
-                          v-if="clip.type === 'video' || clip.type === 'audio'"
-                          type="button"
-                          class="clip-audio-toggle"
-                          @click.stop="toggleClipMuted(clip)"
-                          :title="clip.muted ? 'Unmute clip in render / preview' : 'Mute clip in render / preview'"
-                        >
-                          <VolumeOff v-if="clip.muted" :size="14" />
-                          <Volume2 v-else :size="14" />
-                        </button>
+                        <div v-if="clip.type === 'video' || clip.type === 'image'" class="clip-thumb-bg" aria-hidden="true">
+                          <video v-if="clip.type === 'video'" :src="clip.source" muted preload="metadata" />
+                          <img v-else :src="clip.source" alt="" />
+                        </div>
+                        <div class="clip-content">
+                          <span class="clip-name">{{ getResourceThumbName(clip.source || clip.text || clip.type) }}</span>
+                          <span class="clip-meta">{{ clip.duration.toFixed(1) }}s</span>
+                          <button
+                            v-if="clip.type === 'video' || clip.type === 'audio'"
+                            type="button"
+                            class="clip-audio-toggle"
+                            @click.stop="toggleClipMuted(clip)"
+                            :title="clip.muted ? 'Unmute' : 'Mute'"
+                          >
+                            <VolumeOff v-if="clip.muted" :size="12" />
+                            <Volume2 v-else :size="12" />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
 
-                  <div class="global-playhead" :style="{ left: `${playheadPx}px` }" />
+                  <div v-if="marqueeSelect" class="timeline-marquee" :style="marqueeStyle" />
+                  <div class="global-playhead" :style="{ transform: `translate3d(${playheadPx}px, 0, 0)` }" />
                 </div>
               </div>
             </div>
@@ -1895,6 +2554,7 @@ onBeforeUnmount(() => {
           </div>
         </div>
       </section>
+    </div>
     </div>
 
     <audio
@@ -2001,180 +2661,574 @@ onBeforeUnmount(() => {
   pointer-events:none;
 }
 .render-page{
-  --is-bg:#0f1014;
-  --is-panel:#16181f;
-  --is-panel-2:#1c1f28;
-  --is-border:rgba(120,132,162,.22);
-  --is-border-strong:rgba(134,148,182,.32);
-  --is-border-soft:rgba(134,148,182,.16);
-  --is-gold:#d4af37;
-  --is-gold-deep:#b8922e;
-  --is-text:#eae6dc;
-  --is-muted:#8a8578;
+  --cap-bg:var(--color-bg);
+  --cap-panel:var(--color-bg-elevated);
+  --cap-panel-2:var(--color-bg-soft);
+  --cap-panel-3:var(--card-bg);
+  --cap-border:var(--color-border);
+  --cap-border-strong:var(--color-border);
+  --cap-accent:var(--color-accent);
+  --cap-accent-soft:var(--color-accent-soft);
+  --cap-accent-strong:var(--color-accent-strong);
+  --cap-text:var(--color-text);
+  --cap-muted:var(--color-text-muted);
+  --cap-text-on-accent:var(--color-text-on-accent);
+  --cap-track:var(--color-bg);
+  --cap-playhead:#ffffff;
+  --cap-danger:var(--color-danger);
+  --is-bg:var(--cap-bg);
+  --is-panel:var(--cap-panel);
+  --is-panel-2:var(--cap-panel-2);
+  --is-border:var(--cap-border-strong);
+  --is-border-strong:var(--cap-border-strong);
+  --is-border-soft:var(--cap-border);
+  --is-gold:var(--color-accent);
+  --is-gold-deep:var(--color-accent-strong);
+  --is-text:var(--cap-text);
+  --is-muted:var(--cap-muted);
   height:100%;
   min-height:0;
   display:flex;
   flex-direction:column;
-  background:var(--is-bg);
-  color:var(--is-text);
+  background:var(--cap-bg);
+  color:var(--cap-text);
+  font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  overflow:hidden;
 }
+.editor-layout-wrap{
+  flex:1;
+  min-height:0;
+  overflow:auto;
+}
+.editor-layout{
+  display:flex;
+  flex-direction:column;
+  gap:0;
+  height:100%;
+  min-height:520px;
+  min-width:900px;
+  overflow:hidden;
+}
+.editor-top-row{
+  display:flex;
+  flex:1;
+  min-height:0;
+  min-width:0;
+  overflow:hidden;
+}
+.layout-splitter--vertical{
+  width:6px;
+  flex-shrink:0;
+  cursor:col-resize;
+  position:relative;
+  z-index:3;
+  touch-action:none;
+  background:transparent;
+}
+.layout-splitter--vertical::before{
+  content:'';
+  position:absolute;
+  inset:0;
+  left:50%;
+  width:1px;
+  transform:translateX(-50%);
+  background:var(--cap-border);
+  transition:background .12s ease,width .12s ease;
+}
+.layout-splitter--vertical:hover::before,
+.layout-splitter--vertical.is-active::before{
+  width:2px;
+  background:var(--cap-accent);
+}
+:global(body.render-split-dragging){
+  cursor:col-resize !important;
+  user-select:none !important;
+}
+:global(body.render-split-dragging *){cursor:col-resize !important}
 .toolbar{
-  height:56px;
+  height:46px;
   display:flex;
   justify-content:space-between;
   align-items:center;
-  padding:0 .85rem;
-  border-bottom:1px solid var(--is-border-soft);
-  background:var(--is-panel);
+  padding:0 .75rem;
+  border-bottom:1px solid var(--cap-border);
+  background:var(--cap-bg);
+  flex-shrink:0;
 }
-.toolbar-left,.toolbar-right{display:flex;gap:.5rem;align-items:center}
+.toolbar-left,.toolbar-right{display:flex;gap:.45rem;align-items:center}
 .tool-btn{
-  height:34px;
-  border:1px solid var(--is-border);
-  background:var(--is-panel-2);
-  color:var(--is-text);
-  border-radius:.5rem;
-  padding:0 .7rem;
+  height:32px;
+  border:1px solid var(--cap-border);
+  background:var(--cap-panel-2);
+  color:var(--cap-text);
+  border-radius:6px;
+  padding:0 .65rem;
   display:flex;
-  gap:.4rem;
+  gap:.35rem;
   align-items:center;
   cursor:pointer;
-  font-size:.78rem;
+  font-size:.76rem;
   font-weight:600;
-    justify-content: center;
+  justify-content:center;
+  transition:background .15s ease,border-color .15s ease;
 }
-.tool-btn:disabled{opacity:.55;cursor:not-allowed}
-.tool-btn.ghost{background:var(--is-panel)}
-.tool-btn.small{height:30px;font-size:.72rem}
+.tool-btn:hover:not(:disabled){background:var(--cap-panel-3);border-color:var(--cap-border-strong)}
+.tool-btn:disabled{opacity:.45;cursor:not-allowed}
+.tool-btn.ghost{background:transparent}
+.tool-btn.small{height:28px;font-size:.72rem;padding:0 .5rem}
 .tool-btn.primary{
-  background:linear-gradient(180deg,var(--is-gold) 0%,var(--is-gold-deep) 100%);
-  color:#14120a;
-  border-color:var(--is-gold);
-  box-shadow:0 1px 0 rgba(255,255,255,.12) inset;
+  background:var(--cap-accent);
+  color:var(--cap-text-on-accent);
+  border-color:var(--cap-accent);
+  font-weight:700;
+  box-shadow:none;
 }
+.tool-btn.primary:hover:not(:disabled){background:var(--color-accent-strong);border-color:var(--color-accent-strong)}
 .select{
-  height:34px;
-  background:var(--is-panel-2);
-  border:1px solid var(--is-border);
-  border-radius:.5rem;
-  color:var(--is-text);
+  height:32px;
+  background:var(--cap-panel-2);
+  border:1px solid var(--cap-border);
+  border-radius:6px;
+  color:var(--cap-text);
   padding:0 .55rem;
+  font-size:.76rem;
 }
-.editor-layout{display:grid;grid-template-columns:300px 1fr;grid-template-rows:minmax(160px,1fr) auto;gap:.75rem;flex:1;padding:.75rem;min-height:0;overflow:hidden}
-.resources-panel,.workspace-top,.workspace-bottom{
-  background:var(--is-panel);
-  border:1px solid var(--is-border-soft);
-  border-radius:.65rem;
+.cap-panel{
   min-height:0;
-}
-.resources-panel{padding:.7rem;display:flex;flex-direction:column;overflow:hidden}
-.resources-panel{grid-column:1;grid-row:1}
-.panel-title{font-size:.72rem;font-weight:800;color:var(--is-muted);text-transform:uppercase;margin-bottom:.45rem}
-.upload-btn{
+  overflow:hidden;
+  background:var(--cap-panel);
+  border-bottom:1px solid var(--cap-border);
   display:flex;
-  align-items:center;
-  gap:.4rem;
-  border:1px dashed var(--is-border);
-  border-radius:.5rem;
-  padding:.45rem .55rem;
-  font-size:.75rem;
-  color:var(--is-text);
-  cursor:pointer;
-  transition:opacity .2s,border-color .2s ease,background-color .2s ease;
+  flex-direction:column;
 }
-.upload-btn:hover{border-color:var(--is-border-strong);background:rgba(255,255,255,.02)}
-.upload-btn--busy{opacity:.75;cursor:wait}
-.upload-btn input{display:none}
-.upload-spin{animation:upload-spin .75s linear infinite;color:var(--is-gold,#eab308)}
-@keyframes upload-spin{to{transform:rotate(360deg)}}
-.resource-list{
-  margin-top:.55rem;
+.resources-panel{
+  flex-shrink:0;
+  min-width:0;
+  border-right:none;
+}
+.resources-panel-head{
+  display:flex;
+  align-items:stretch;
+  height:36px;
+  min-height:36px;
+  border-bottom:1px solid var(--cap-border);
+  background:var(--cap-panel);
+  flex-shrink:0;
+}
+.resources-tab{
+  flex:1;
+  min-width:0;
+  border:none;
+  border-right:1px solid var(--cap-border);
+  background:transparent;
+  color:var(--cap-muted);
+  font-size:.7rem;
+  font-weight:700;
+  letter-spacing:.01em;
+  cursor:pointer;
+  position:relative;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:.3rem;
+  padding:0 .35rem;
+  transition:color .15s ease,background .15s ease;
+}
+.resources-tab:last-child{border-right:none}
+.resources-tab:hover{color:var(--cap-text);background:rgba(255,255,255,.03)}
+.resources-tab--active{
+  color:var(--cap-accent);
+  background:var(--color-accent-bg-fade-2);
+}
+.resources-tab--active::after{
+  content:'';
+  position:absolute;
+  left:12%;
+  right:12%;
+  bottom:0;
+  height:2px;
+  background:var(--cap-accent);
+  border-radius:2px 2px 0 0;
+}
+.resources-tab-badge{
+  min-width:16px;
+  height:16px;
+  padding:0 4px;
+  border-radius:999px;
+  background:var(--cap-accent-soft);
+  color:var(--cap-accent);
+  font-size:.58rem;
+  font-weight:800;
+  line-height:16px;
+}
+.resource-tab-pane{
+  flex:1;
+  min-height:0;
   display:flex;
   flex-direction:column;
   gap:.45rem;
   overflow:auto;
-  min-height:0;
 }
-.resource-list{-ms-overflow-style:none;scrollbar-width:none}
-.resource-list::-webkit-scrollbar{display:none}
-.resource-item{
-  border:1px solid var(--is-border-soft);
-  border-radius:.5rem;
-  background:var(--is-bg);
-  display:flex;
+.resource-tab-pane--empty{
   align-items:center;
-  gap:.55rem;
-  padding:.38rem;
+  justify-content:center;
+  text-align:center;
+  padding:1rem .5rem;
+  color:var(--cap-muted);
 }
-.resource-thumb{
-  width:84px;
-  min-width:84px;
-  height:64px;
-  border-radius:.42rem;
-  overflow:hidden;
-  border:1px solid var(--is-border-soft);
-  background:rgba(255,255,255,.02);
-}
-.resource-thumb img,.resource-thumb video{width:100%;height:100%;object-fit:cover;display:block}
-.audio-box{height:100%;display:flex;gap:.4rem;align-items:center;justify-content:center;color:#f5ecd0;font-weight:700}
-.resource-main{min-width:0;flex:1;display:flex;flex-direction:column;gap:.15rem}
-.resource-name{
+.resource-tab-empty-icon{color:var(--cap-accent);opacity:.75;margin-bottom:.35rem}
+.resource-tab-empty-title{
+  margin:0 0 .25rem;
   font-size:.78rem;
   font-weight:700;
-  color:var(--is-text);
-  white-space:nowrap;
+  color:var(--cap-text);
+}
+.resource-tab-empty-sub{
+  margin:0;
+  font-size:.7rem;
+  line-height:1.45;
+  max-width:14rem;
+}
+.resource-pane-action{
+  width:100%;
+  height:28px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:.35rem;
+  border:1px solid var(--cap-accent-strong);
+  border-radius:5px;
+  background:var(--cap-accent-soft);
+  color:var(--cap-accent);
+  font-size:.66rem;
+  font-weight:700;
+  cursor:pointer;
+  flex-shrink:0;
+}
+.resource-pane-action:hover{background:var(--color-accent-bg-fade-1)}
+.text-preset-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:.4rem;
+}
+.text-preset-card{
+  min-height:64px;
+  border:1px solid var(--cap-border);
+  border-radius:6px;
+  background:var(--cap-panel-2);
+  color:var(--cap-text);
+  cursor:pointer;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:.25rem;
+  padding:.45rem .35rem;
+  transition:border-color .15s ease,background .15s ease;
+}
+.text-preset-card:hover{border-color:var(--cap-accent-strong);background:var(--cap-panel-2)}
+.text-preset-preview{
+  font-size:.82rem;
+  font-weight:700;
+  line-height:1.2;
+  text-align:center;
   overflow:hidden;
   text-overflow:ellipsis;
+  white-space:nowrap;
+  max-width:100%;
 }
-.resource-type{
-  font-size:.67rem;
+.text-preset-label{
+  font-size:.62rem;
+  color:var(--cap-muted);
   text-transform:uppercase;
-  color:var(--is-muted);
   letter-spacing:.04em;
 }
-.resource-actions{display:flex;gap:.25rem}
-.resource-actions button{border:1px solid var(--is-border);background:var(--is-panel-2);color:var(--is-text);border-radius:.35rem;cursor:pointer;padding:.2rem .3rem}
-.clip-audio-toggle{display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:26px;border:1px solid var(--is-border);background:var(--is-panel-2);color:var(--is-text);border-radius:.32rem;cursor:pointer;padding:0}
-.workspace-top{
-  grid-column:2;
-  grid-row:1;
-  padding:.7rem;
+.player-panel{
+  flex:1;
+  min-width:280px;
+  border-right:none;
+}
+.inspector-panel{
+  flex-shrink:0;
+  min-width:0;
+  border-right:none;
+}
+.workspace-bottom{
+  flex-shrink:0;
+  height:clamp(220px,32vh,340px);
+  border-right:none;
+  padding:0;
   display:flex;
   flex-direction:column;
   min-height:0;
-  height:100%;
-  max-height:100%;
-  overflow:hidden;
 }
-.workspace-bottom{
-  grid-column:1 / -1;
-  grid-row:2;
-  padding:.7rem;
-  display:grid;
-  grid-template-rows:50px 300px;
-  gap:.55rem;
+.cap-panel-head{
+  height:36px;
+  min-height:36px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:.5rem;
+  padding:0 .75rem;
+  border-bottom:1px solid var(--cap-border);
+  background:var(--cap-panel);
+  flex-shrink:0;
 }
-.preview-panel{
+.cap-panel-title{
+  font-size:.78rem;
+  font-weight:700;
+  color:var(--cap-text);
+  letter-spacing:.01em;
+}
+.cap-panel-badge{
+  min-width:20px;
+  height:18px;
+  padding:0 6px;
+  border-radius:999px;
+  background:var(--cap-accent-soft);
+  color:var(--cap-accent);
+  font-size:.64rem;
+  font-weight:800;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+}
+.resources-body{
   flex:1;
   min-height:0;
-  min-width:0;
-  border:1px solid var(--is-border-soft);
-  border-radius:.6rem;
-  background:var(--is-bg);
-  display:grid;
-  grid-template-columns:minmax(0,1fr) 300px;
-  gap:12px;
-  align-items:stretch;
-  justify-content:stretch;
+  display:flex;
+  flex-direction:column;
+  gap:.4rem;
+  padding:.55rem;
   overflow:hidden;
-  padding:8px;
 }
-.preview-stage{
+.resources-toolbar{
+  display:flex;
+  flex-direction:row;
+  align-items:center;
+  gap:.35rem;
+  flex-shrink:0;
+}
+.cap-import-btn,
+.add-all-videos-btn{
+  flex:1;
   min-width:0;
+  height:28px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:.3rem;
+  border-radius:5px;
+  padding:0 .4rem;
+  font-size:.66rem;
+  font-weight:600;
+  white-space:nowrap;
+  overflow:hidden;
+}
+.cap-import-btn span,
+.add-all-videos-btn span{
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.cap-import-btn{
+  border:1px solid var(--cap-accent-strong);
+  color:var(--cap-accent);
+  background:var(--cap-accent-soft);
+  cursor:pointer;
+  transition:opacity .2s,background .2s ease;
+}
+.cap-import-btn:hover{background:var(--color-accent-bg-fade-1)}
+.upload-btn--busy{opacity:.75;cursor:wait}
+.upload-btn input{display:none}
+.add-all-videos-btn{
+  border:1px solid var(--cap-border);
+  color:var(--cap-muted);
+  background:var(--cap-panel-2);
+  cursor:pointer;
+  transition:opacity .2s ease,border-color .2s ease,color .2s ease;
+}
+.add-all-videos-btn:hover:not(:disabled){border-color:var(--cap-accent-strong);color:var(--cap-text)}
+.add-all-videos-btn:disabled{opacity:.42;cursor:not-allowed}
+.add-all-videos-btn--busy{cursor:wait}
+.upload-spin{animation:upload-spin .75s linear infinite;color:var(--cap-accent)}
+@keyframes upload-spin{to{transform:rotate(360deg)}}
+.resource-grid{
+  flex:1;
+  min-height:0;
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(112px,1fr));
+  gap:10px 8px;
+  align-content:start;
+  overflow:auto;
+  padding:2px 4px 4px 0;
+  scrollbar-width:thin;
+  scrollbar-color:var(--color-border) transparent;
+}
+.resource-grid::-webkit-scrollbar{width:6px}
+.resource-grid::-webkit-scrollbar-thumb{background:var(--color-border);border-radius:999px}
+.media-item{
+  min-width:0;
+  cursor:grab;
+  user-select:none;
+}
+.media-item-thumb{
+  position:relative;
+  width:100%;
+  aspect-ratio:16/10;
+  border-radius:6px;
+  overflow:hidden;
+  background:var(--cap-bg);
+  border:1px solid transparent;
+  transition:border-color .15s ease;
+}
+.media-item:hover .media-item-thumb{border-color:rgba(255,255,255,.12)}
+.media-item-thumb img,.media-item-thumb video{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  display:block;
+  pointer-events:none;
+}
+.media-item-audio{
+  width:100%;
+  height:100%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  color:var(--cap-accent);
+  background:linear-gradient(180deg,var(--cap-panel-2) 0%,var(--cap-bg) 100%);
+}
+.media-item-added{
+  position:absolute;
+  top:5px;
+  left:5px;
+  z-index:2;
+  display:inline-flex;
+  align-items:center;
+  gap:3px;
+  padding:2px 6px;
+  border-radius:4px;
+  background:rgba(0,0,0,.62);
+  color:#fff;
+  font-size:10px;
+  font-weight:700;
+  line-height:1.2;
+  pointer-events:none;
+}
+.media-item-duration{
+  position:absolute;
+  top:5px;
+  right:5px;
+  z-index:2;
+  font-size:11px;
+  font-weight:700;
+  color:#fff;
+  text-shadow:0 1px 3px rgba(0,0,0,.85);
+  pointer-events:none;
+  font-variant-numeric:tabular-nums;
+}
+.media-item-actions{
+  position:absolute;
+  inset:0;
+  z-index:3;
+  display:flex;
+  align-items:flex-end;
+  justify-content:flex-end;
+  gap:4px;
+  padding:5px;
+  opacity:0;
+  background:linear-gradient(180deg,transparent 35%,rgba(0,0,0,.55) 100%);
+  transition:opacity .15s ease;
+}
+.media-item:hover .media-item-actions{opacity:1}
+.media-item-action{
+  width:22px;
+  height:22px;
+  border:none;
+  border-radius:4px;
+  background:rgba(24,24,24,.92);
+  color:#fff;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+}
+.media-item-action:hover{background:var(--cap-accent);color:var(--cap-text-on-accent)}
+.media-item-action--danger:hover{background:var(--color-danger);color:#fff}
+.media-item-name{
+  margin-top:5px;
+  font-size:11px;
+  line-height:1.25;
+  font-weight:500;
+  color:var(--cap-muted);
+  text-align:center;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  padding:0 2px;
+}
+.resource-empty{
+  grid-column:1 / -1;
+  padding:1.5rem .5rem;
+  text-align:center;
+  font-size:.74rem;
+  color:var(--cap-muted);
+}
+.player-head .player-time{
+  font-size:.62rem;
+  font-weight:600;
+  color:var(--cap-muted);
+  font-variant-numeric:tabular-nums;
+}
+.player-body{
+  flex:1;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+  background:var(--cap-bg);
+}
+.player-body .preview-stage{
+  flex:1;
   min-height:0;
   overflow:hidden;
-  height:100%;
-  max-height:100%;
+}
+.player-controls{
+  height:44px;
+  min-height:44px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border-top:1px solid var(--cap-border);
+  background:var(--cap-panel);
+  flex-shrink:0;
+}
+.player-play-btn{
+  width:34px;
+  height:34px;
+  border:none;
+  border-radius:50%;
+  background: transparent;
+  color:var(--cap-text);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+  transition:transform .12s ease,background .12s ease;
+}
+.player-play-btn:hover{transform:scale(1.05);background: transparent}
+.clip-audio-toggle{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:22px;
+  height:22px;
+  border:1px solid rgba(255,255,255,.18);
+  /* background:rgba(0,0,0,.35); */
+  /* color:var(--cap-text); */
+  border-radius:4px;
+  cursor:pointer;
+  padding:0;
+  flex-shrink:0;
 }
 .preview-aspect-host{
   width:100%;
@@ -2182,7 +3236,7 @@ onBeforeUnmount(() => {
   min-width:0;
   min-height:0;
   box-sizing:border-box;
-  padding:6px;
+  padding:10px;
   display:grid;
   place-items:center;
   container-type:size;
@@ -2196,11 +3250,11 @@ onBeforeUnmount(() => {
   width:min(100cqw,calc(100cqh * var(--ar-w) / var(--ar-h)));
   height:min(100cqh,calc(100cqw * var(--ar-h) / var(--ar-w)));
   aspect-ratio:var(--ar-w) / var(--ar-h);
-  border:1px solid rgba(212,175,55,.55);
-  border-radius:.5rem;
-  background:#0a0c12;
+  border:none;
+  border-radius:4px;
+  background:#000;
   overflow:hidden;
-  box-shadow:inset 0 0 0 1px rgba(0,0,0,.35);
+  box-shadow:0 0 0 1px rgba(255,255,255,.06);
 }
 @supports not (width:1cqw){
   .preview-frame{
@@ -2215,7 +3269,7 @@ onBeforeUnmount(() => {
   position:absolute;
   inset:0;
   overflow:hidden;
-  background:#0e1119;
+  background:#000;
 }
 .preview-media-layer{
   position:absolute;
@@ -2236,7 +3290,7 @@ onBeforeUnmount(() => {
 .visual-layout-box.selected{
   outline:none;
   border:none;
-  box-shadow:0 0 0 1px rgba(212,175,55,.45);
+  box-shadow:0 0 0 2px var(--cap-accent);
 }
 .visual-layout-box.is-dragging,.visual-layout-box.is-resizing{cursor:grabbing}
 .visual-layout-box video,.visual-layout-box img{
@@ -2252,51 +3306,31 @@ onBeforeUnmount(() => {
   position:absolute;
   right:2px;
   bottom:2px;
-  width:12px;
-  height:12px;
+  width:10px;
+  height:10px;
   border-radius:2px;
-  background:#ffd66d;
-  border:1px solid #111318;
+  background:var(--cap-accent);
+  border:1px solid var(--cap-panel);
   cursor:nwse-resize;
   pointer-events:auto;
   z-index:2;
 }
-.inspector-panel{
-  box-sizing:border-box;
-  width:300px;
-  min-width:300px;
-  max-width:300px;
-  display:flex;
-  flex-direction:column;
+.inspector-body{
+  flex:1;
   min-height:0;
   overflow:auto;
-  padding:1rem 1rem 1.15rem;
-  border-radius:.65rem;
-  background:linear-gradient(165deg,#1b1f2a 0%,#141822 42%,#10141c 100%);
-  border:1px solid var(--is-border-soft);
-  box-shadow:
-    0 10px 32px rgba(0,0,0,.42),
-    inset 0 1px 0 rgba(255,255,255,.05);
+  padding:.65rem .75rem .85rem;
   scrollbar-width:thin;
-  scrollbar-color:rgba(212,175,55,.35) rgba(0,0,0,.15);
+  scrollbar-color:var(--color-border) transparent;
 }
-.inspector-panel::-webkit-scrollbar{width:6px}
-.inspector-panel::-webkit-scrollbar-track{background:rgba(0,0,0,.2);border-radius:999px}
-.inspector-panel::-webkit-scrollbar-thumb{background:rgba(212,175,55,.35);border-radius:999px}
-.inspector-panel::-webkit-scrollbar-thumb:hover{background:rgba(212,175,55,.5)}
-.inspector-panel h4{
-  flex-shrink:0;
-  margin:0 0 .85rem;
-  padding-bottom:.55rem;
-  font-size:.74rem;
-  font-weight:800;
-  letter-spacing:.1em;
-  text-transform:uppercase;
-  color:var(--is-gold);
-  border-bottom:1px solid var(--is-border-soft);
-  text-shadow:0 1px 0 rgba(0,0,0,.35);
+.inspector-body::-webkit-scrollbar{width:6px}
+.inspector-body::-webkit-scrollbar-thumb{background:var(--color-border);border-radius:999px}
+.inspector-panel{
+  box-sizing:border-box;
+  min-height:0;
+  overflow:hidden;
 }
-.inspector-panel.empty{opacity:.78}
+.inspector-panel.empty .inspector-body{opacity:.75}
 .inspector-empty{
   font-size:.78rem;
   color:var(--is-muted);
@@ -2318,42 +3352,39 @@ onBeforeUnmount(() => {
   color:var(--is-muted);
 }
 .inspector-grid input,.inspector-grid select{
-  height:34px;
+  height:32px;
   box-sizing:border-box;
   width:100%;
-  background:rgba(14,17,25,.9);
-  border:1px solid var(--is-border);
-  border-radius:.5rem;
-  color:var(--is-text);
+  background:var(--cap-track);
+  border:1px solid var(--cap-border);
+  border-radius:6px;
+  color:var(--cap-text);
   padding:0 .55rem;
-  font-size:.8rem;
+  font-size:.78rem;
   transition:border-color .15s ease,box-shadow .15s ease;
 }
-.inspector-grid input:hover,.inspector-grid select:hover{
-  border-color:rgba(212,175,55,.28);
-}
+.inspector-grid input:hover,.inspector-grid select:hover{border-color:var(--cap-border-strong)}
 .inspector-grid input:focus-visible,.inspector-grid select:focus-visible{
   outline:none;
-  border-color:rgba(212,175,55,.45);
-  box-shadow:0 0 0 2px rgba(212,175,55,.12);
+  border-color:var(--cap-accent-strong);
+  box-shadow:0 0 0 2px var(--cap-accent-soft);
 }
 .inspector-box{
-  border:1px solid var(--is-border-soft);
-  border-radius:.55rem;
-  padding:.65rem .75rem .75rem;
+  border:1px solid var(--cap-border);
+  border-radius:6px;
+  padding:.55rem .65rem .65rem;
   margin-bottom:.35rem;
-  background:rgba(8,10,16,.5);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.04);
+  background:var(--cap-track);
 }
 .inspector-box-title{
   font-size:.64rem;
-  font-weight:800;
-  color:rgba(214,196,148,.9);
+  font-weight:700;
+  color:var(--cap-muted);
   text-transform:uppercase;
-  letter-spacing:.08em;
-  margin:0 0 .5rem;
-  padding-bottom:.4rem;
-  border-bottom:1px solid var(--is-border-soft);
+  letter-spacing:.06em;
+  margin:0 0 .45rem;
+  padding-bottom:.35rem;
+  border-bottom:1px solid var(--cap-border);
 }
 .inspector-field-label{
   display:block;
@@ -2368,61 +3399,57 @@ onBeforeUnmount(() => {
 .inspector-textarea{
   width:100%;
   box-sizing:border-box;
-  min-height:80px;
+  min-height:72px;
   resize:vertical;
-  padding:.5rem .55rem;
-  border-radius:.5rem;
-  border:1px solid var(--is-border);
-  background:rgba(14,17,25,.9);
-  color:var(--is-text);
-  font-size:.8rem;
+  padding:.45rem .55rem;
+  border-radius:6px;
+  border:1px solid var(--cap-border);
+  background:var(--cap-track);
+  color:var(--cap-text);
+  font-size:.78rem;
   line-height:1.4;
   font-family:inherit;
-  transition:border-color .15s ease,box-shadow .15s ease;
 }
-.inspector-textarea:hover{border-color:rgba(212,175,55,.28)}
 .inspector-textarea:focus-visible{
   outline:none;
-  border-color:rgba(212,175,55,.45);
-  box-shadow:0 0 0 2px rgba(212,175,55,.12);
+  border-color:var(--cap-accent-strong);
+  box-shadow:0 0 0 2px var(--cap-accent-soft);
 }
 .inspector-select,.inspector-input{
   width:100%;
   box-sizing:border-box;
-  height:34px;
-  border-radius:.5rem;
-  border:1px solid var(--is-border);
-  background:rgba(14,17,25,.9);
-  color:var(--is-text);
+  height:32px;
+  border-radius:6px;
+  border:1px solid var(--cap-border);
+  background:var(--cap-track);
+  color:var(--cap-text);
   padding:0 .55rem;
-  font-size:.8rem;
-  transition:border-color .15s ease,box-shadow .15s ease;
+  font-size:.78rem;
 }
-.inspector-select:hover,.inspector-input:hover{border-color:rgba(212,175,55,.28)}
 .inspector-select:focus-visible,.inspector-input:focus-visible{
   outline:none;
-  border-color:rgba(212,175,55,.45);
-  box-shadow:0 0 0 2px rgba(212,175,55,.12);
+  border-color:var(--cap-accent-strong);
+  box-shadow:0 0 0 2px var(--cap-accent-soft);
 }
-.inspector-select{cursor:pointer;appearance:auto}
+.inspector-swatch.active{outline:2px solid var(--cap-accent);outline-offset:1px}
 .inspector-color-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:.15rem}
 .inspector-swatch{
   width:22px;
   height:22px;
   border-radius:5px;
-  border:1px solid var(--is-border);
+  border:1px solid var(--cap-border);
   cursor:pointer;
   padding:0;
   flex-shrink:0;
 }
-.inspector-swatch.active{outline:2px solid var(--is-gold);outline-offset:1px}
 .inspector-color-native{width:34px;height:34px;padding:0;border:none;border-radius:6px;cursor:pointer;background:transparent}
-.inspector-input--hex{flex:1;min-width:0;max-width:160px;height:34px}
+.inspector-input--hex{flex:1;min-width:0;max-width:160px;height:32px}
+.inspector-select{cursor:pointer;appearance:auto}
 .inspector-input--readonly{
   cursor:default;
   opacity:.92;
   color:rgba(226,228,236,.88);
-  background:rgba(10,12,18,.65);
+  background:var(--cap-track);
   border-style:dashed;
 }
 .preview-empty{
@@ -2434,7 +3461,8 @@ onBeforeUnmount(() => {
   justify-content:center;
   padding:.75rem;
   text-align:center;
-  color:#bda56c;
+  color:var(--cap-muted);
+  font-size:.78rem;
   pointer-events:none;
 }
 .text-overlay-layer{
@@ -2465,35 +3493,72 @@ onBeforeUnmount(() => {
   position:absolute;
   right:2px;
   bottom:2px;
-  width:11px;
-  height:11px;
+  width:10px;
+  height:10px;
   border-radius:50%;
-  background:#ffd66d;
-  border:1px solid #111318;
+  background:var(--cap-accent);
+  border:1px solid var(--cap-panel);
   cursor:ew-resize;
 }
-.timeline-toolbar{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:.5rem;height:50px;min-height:50px;max-height:50px}
-.timeline-toolbar-side{display:flex;align-items:center;gap:.5rem;min-width:0}
-.timeline-toolbar-left{justify-self:start;flex-wrap:wrap;row-gap:.35rem}
-.timeline-add-track-btn{min-width:34px;padding:0 .4rem}
-.timeline-toolbar-center{display:flex;align-items:center;justify-content:center;gap:.45rem;justify-self:center}
-.timeline-toolbar-right{justify-self:end}
-.timeline-icon-btn,.timeline-play-btn{min-width:38px;padding:0 .55rem;justify-content:center}
-.timeline-play-btn{min-width:42px}
+.timeline-toolbar{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:.5rem;
+  height:40px;
+  min-height:40px;
+  padding:0 .55rem;
+  border-bottom:1px solid var(--cap-border);
+  background:var(--cap-panel);
+  flex-shrink:0;
+}
+.timeline-toolbar-side{display:flex;align-items:center;gap:.35rem;min-width:0}
+.timeline-toolbar-left{flex-wrap:wrap}
+.timeline-toolbar-right{margin-left:auto}
+.cap-tool-btn{
+  width:30px;
+  height:30px;
+  border:none;
+  border-radius:6px;
+  background:transparent;
+  color:var(--cap-text);
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+  font-size:.72rem;
+  font-weight:700;
+  transition:background .12s ease,color .12s ease;
+}
+.cap-tool-btn:hover:not(:disabled){background:var(--cap-panel-3)}
+.cap-tool-btn:disabled{opacity:.35;cursor:not-allowed}
+.cap-toolbar-divider{
+  width:1px;
+  height:18px;
+  background:var(--cap-border);
+  margin:0 .15rem;
+}
 .inspector-audio-btn{justify-content:center;width:100%;margin-top:.15rem}
-.zoom-range{width:180px}
-.zoom-label,.time-view{font-size:.76rem;color:var(--is-muted)}
-.timeline-shell{display:grid;grid-template-rows:280px 14px;gap:6px;height:300px;min-height:300px;max-height:300px}
+.zoom-range,.cap-range{width:120px;height:4px;accent-color:var(--cap-accent)}
+.zoom-label,.time-view{font-size:.72rem;color:var(--cap-muted);font-variant-numeric:tabular-nums}
+.timeline-shell{
+  display:grid;
+  grid-template-rows:minmax(0,1fr) 12px;
+  gap:4px;
+  flex:1;
+  min-height:0;
+  padding:0 .45rem .45rem;
+  background:var(--cap-panel);
+}
 /* Tách cuộn dọc / ngang: chỉ một thanh ngang (custom bên dưới), tránh 2 scrollbar chồng nhau */
 .timeline-view-outer{
   position:relative;
   overflow:hidden;
-  height:280px;
-  min-height:280px;
-  max-height:280px;
-  border:1px solid var(--is-border-soft);
-  border-radius:.6rem;
-  background:var(--is-bg);
+  min-height:0;
+  height:100%;
+  border:1px solid var(--cap-border);
+  border-radius:4px;
+  background:var(--cap-track);
   display:flex;
   flex-direction:column;
 }
@@ -2503,10 +3568,10 @@ onBeforeUnmount(() => {
   overflow-x:hidden;
   overflow-y:auto;
   scrollbar-width:thin;
-  scrollbar-color:#4a5370 #0e1119;
+  scrollbar-color:var(--color-border) transparent;
 }
-.timeline-view-v::-webkit-scrollbar{width:8px}
-.timeline-view-v::-webkit-scrollbar-thumb{background:#4a5370;border-radius:4px}
+.timeline-view-v::-webkit-scrollbar{width:6px}
+.timeline-view-v::-webkit-scrollbar-thumb{background:var(--color-border);border-radius:4px}
 .timeline-view-h{
   position:relative;
   width:100%;
@@ -2514,62 +3579,237 @@ onBeforeUnmount(() => {
   overflow-y:visible;
   -ms-overflow-style:none;
   scrollbar-width:none;
+  scroll-behavior:auto;
 }
 .timeline-view-h::-webkit-scrollbar{display:none}
-.timeline-content{position:relative;min-height:100%}
-.timeline-scrollbar{position:relative;height:14px;background:#1a2030;border:1px solid var(--is-border-soft);border-radius:999px}
-.timeline-scrollbar-thumb{position:absolute;left:0;top:1px;height:10px;background:#4a5370;border-radius:999px;cursor:ew-resize}
-.time-ruler{height:28px;position:relative;border-bottom:1px solid var(--is-border-soft);display:flex;align-items:stretch;gap:8px}
-.ruler-label-spacer{width:110px;min-width:110px}
-.ruler-scale{position:relative}
-.tick{position:absolute;top:4px;transform:translateX(-50%);font-size:.64rem;color:#cbb57f}
-.track-row{display:grid;grid-template-columns:110px 1fr;gap:.45rem;align-items:start;min-height:50px;margin-top:.28rem;transition:opacity .18s ease,filter .18s ease}
-.track-row--hidden{opacity:.42;filter:saturate(.65)}
+.timeline-content{position:relative;min-height:100%;contain:layout style;padding-bottom:.35rem}
+.timeline-scrollbar{
+  position:relative;
+  height:12px;
+  background:var(--cap-panel-2);
+  border:1px solid var(--cap-border);
+  border-radius:999px;
+}
+.timeline-scrollbar-thumb{
+  position:absolute;
+  left:0;
+  top:1px;
+  height:8px;
+  background:var(--color-border);
+  border-radius:999px;
+  cursor:ew-resize;
+  transition:background .15s ease;
+}
+.timeline-scrollbar-thumb:hover{background:var(--cap-muted)}
+.time-ruler{
+  height:28px;
+  position:sticky;
+  top:0;
+  z-index:12;
+  border-bottom:1px solid var(--cap-border);
+  display:flex;
+  align-items:stretch;
+  gap:0;
+  background:var(--cap-panel-2);
+}
+.ruler-label-spacer{
+  width:110px;
+  min-width:110px;
+  flex-shrink:0;
+  background:var(--cap-panel);
+  border-right:1px solid var(--cap-border);
+}
+.ruler-scale{
+  position:relative;
+  flex-shrink:0;
+}
+.ruler-scale::before{
+  content:'';
+  position:absolute;
+  inset:0;
+  background:repeating-linear-gradient(
+    90deg,
+    rgba(255,255,255,.08) 0,
+    rgba(255,255,255,.08) 1px,
+    transparent 1px,
+    transparent calc(var(--tick-step-px, 86px))
+  );
+  opacity:.65;
+  pointer-events:none;
+}
+.tick{
+  position:absolute;
+  top:7px;
+  transform:translateX(-50%);
+  font-size:.52rem;
+  color:var(--cap-muted);
+  font-weight:400;
+  font-variant-numeric:tabular-nums;
+}
+.tick--origin{transform:translateX(0)}
+.track-row{
+  display:grid;
+  grid-template-columns:110px 1fr;
+  gap:0;
+  align-items:stretch;
+  min-height:52px;
+  border-bottom:1px solid var(--cap-border);
+  transition:opacity .15s ease;
+}
+.track-row--hidden{opacity:.38}
 .track-label{
-  height:43px;
-  border:1px solid var(--is-border);
-  border-radius:.45rem;
-  background:var(--is-panel-2);
-  color:var(--is-gold);
+  height:52px;
+  border:none;
+  border-right:1px solid var(--cap-border);
+  border-radius:0;
+  background:var(--cap-panel);
+  color:var(--cap-muted);
   display:flex;
   align-items:center;
   justify-content:center;
-  gap:.2rem;
-  padding:0 .2rem;
-  font-weight:800;
-  font-size:.68rem;
+  gap:.15rem;
+  padding:0 .25rem;
+  font-weight:700;
+  font-size:.64rem;
   cursor:pointer;
   user-select:none;
-  transition:outline .12s ease,box-shadow .12s ease;
+  transition:background .12s ease,color .12s ease;
 }
 .track-visibility-btn{
   flex-shrink:0;
   display:flex;
   align-items:center;
   justify-content:center;
-  width:26px;
-  height:26px;
+  width:24px;
+  height:24px;
   padding:0;
   border:none;
-  border-radius:.32rem;
+  border-radius:4px;
   background:transparent;
   color:inherit;
   cursor:pointer;
-  opacity:.88;
 }
-.track-visibility-btn:hover{opacity:1;background:rgba(212,175,55,.12)}
-.track-label-text{flex:1;min-width:0;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.track-visibility-btn:hover{background:var(--cap-panel-3);color:var(--cap-text)}
+.track-label-text{flex:1;min-width:0;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-left:.15rem}
 .track-label--active{
-  outline:2px solid var(--is-gold);
-  box-shadow:0 0 0 1px rgba(212,175,55,.22) inset;
+  background:var(--cap-panel-2);
+  color:var(--cap-accent);
+  box-shadow:inset 3px 0 0 var(--cap-accent);
 }
-.track-lane{position:relative;min-height:43px;border:1px solid var(--is-border-soft);border-radius:.45rem;background:#0e1119}
-.timeline-clip{position:absolute;top:4px;height:35px;border:1px solid var(--is-border);border-radius:.36rem;background:var(--is-panel-2);color:var(--is-text);display:grid;grid-template-columns:auto auto 1fr auto;align-items:center;gap:.28rem;padding:.2rem .32rem}
-.timeline-clip.selected{outline:2px solid var(--is-gold)}
-.clip-name{text-transform:uppercase;font-size:.62rem;font-weight:800}
-.clip-meta{font-size:.62rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.global-playhead{position:absolute;top:0;bottom:0;width:2px;background:var(--is-gold);z-index:30;pointer-events:none}
-.global-playhead::before{content:'';position:absolute;top:-1px;left:-5px;width:12px;height:12px;background:var(--is-gold);clip-path:polygon(50% 100%,0 0,100% 0)}
+.track-lane{
+  position:relative;
+  min-height:52px;
+  height:52px;
+  border:none;
+  border-radius:0;
+  background:var(--cap-track);
+  contain:layout paint;
+  overflow:hidden;
+}
+.timeline-clip{
+  position:absolute;
+  top:4px;
+  height:44px;
+  border:1px solid rgba(255,255,255,.12);
+  border-radius:4px;
+  background:var(--cap-panel-2);
+  color:var(--cap-text);
+  overflow:hidden;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.04);
+  transition:box-shadow .12s ease,border-color .12s ease;
+  will-change:transform;
+}
+.timeline-clip:hover{border-color:rgba(255,255,255,.22)}
+.timeline-clip--video{border-color:color-mix(in srgb,var(--color-accent) 35%,transparent)}
+.timeline-clip--audio{border-color:rgba(96,165,250,.28);background:#172033}
+.timeline-clip--image{border-color:rgba(74,222,128,.24)}
+.timeline-clip--text{border-color:rgba(192,132,252,.24);background:#221a2e}
+.timeline-clip.selected{
+  border:2px solid var(--cap-playhead);
+  box-shadow:0 0 0 1px rgba(0,0,0,.5);
+  z-index:5;
+}
+.clip-thumb-bg{
+  position:absolute;
+  inset:0;
+  opacity:.72;
+  pointer-events:none;
+}
+.clip-thumb-bg video,.clip-thumb-bg img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  display:block;
+}
+.clip-content{
+  position:relative;
+  z-index:1;
+  height:100%;
+  display:flex;
+  align-items:center;
+  gap:.35rem;
+  padding:.15rem .4rem;
+  background:linear-gradient(180deg,rgba(0,0,0,.35) 0%,rgba(0,0,0,.15) 100%);
+}
+.clip-name{
+  flex:1;
+  min-width:0;
+  font-size:.62rem;
+  font-weight:700;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.clip-meta{
+  font-size:.6rem;
+  font-weight:600;
+  color:rgba(255,255,255,.75);
+  white-space:nowrap;
+  flex-shrink:0;
+}
+.global-playhead{
+  position:absolute;
+  top:0;
+  bottom:0;
+  left:0;
+  width:2px;
+  background:var(--cap-playhead);
+  z-index:30;
+  pointer-events:none;
+  will-change:transform;
+  box-shadow:0 0 6px rgba(255,255,255,.35);
+}
+.global-playhead::before{
+  content:'';
+  position:absolute;
+  top:0;
+  left:50%;
+  transform:translateX(-50%);
+  width:10px;
+  height:14px;
+  background:var(--cap-playhead);
+  border-radius:2px 2px 0 0;
+  box-shadow:0 1px 3px rgba(0,0,0,.45);
+}
+.timeline-marquee{
+  position:absolute;
+  z-index:24;
+  border:1px solid var(--cap-accent);
+  background:var(--color-accent-soft);
+  border-radius:2px;
+  pointer-events:none;
+  box-shadow:inset 0 0 0 1px var(--color-accent-bg-fade-2);
+}
+.inspector-multi-hint{
+  margin:0 0 .55rem;
+  padding:.45rem .5rem;
+  border-radius:6px;
+  border:1px solid var(--cap-border);
+  background:var(--color-accent-bg-fade-2);
+  color:var(--cap-muted);
+  font-size:.68rem;
+  line-height:1.4;
+}
 .render-modal-overlay{
   position:fixed;
   inset:0;
@@ -2586,7 +3826,7 @@ onBeforeUnmount(() => {
   max-width:420px;
   border-radius:.85rem;
   padding:1.35rem 1.35rem 1.15rem;
-  background:linear-gradient(165deg,var(--is-panel) 0%,#12151c 100%);
+  background:linear-gradient(165deg,var(--is-panel) 0%,var(--color-bg-soft) 100%);
   border:1px solid var(--is-border-strong);
   box-shadow:0 18px 48px rgba(0,0,0,.45),0 0 0 1px rgba(0,0,0,.25) inset;
 }
@@ -2600,7 +3840,7 @@ onBeforeUnmount(() => {
   align-items:center;
   justify-content:center;
   margin-bottom:.65rem;
-  color:#14120a;
+  color:var(--color-text-on-accent);
   background:linear-gradient(180deg,var(--is-gold) 0%,var(--is-gold-deep) 100%);
   border:1px solid rgba(255,255,255,.12);
   box-shadow:0 2px 8px rgba(0,0,0,.25);
@@ -2651,7 +3891,7 @@ onBeforeUnmount(() => {
 }
 .render-modal-btn.primary{
   background:linear-gradient(180deg,var(--is-gold) 0%,var(--is-gold-deep) 100%);
-  color:#14120a;
+  color:var(--color-text-on-accent);
   border-color:var(--is-gold);
   box-shadow:0 1px 0 rgba(255,255,255,.15) inset;
 }
@@ -2660,7 +3900,7 @@ onBeforeUnmount(() => {
   border-color:var(--is-border-strong);
   color:var(--is-text);
 }
-.render-modal-btn.secondary:hover{background:#232731}
+.render-modal-btn.secondary:hover{background:var(--color-bg-soft)}
 .render-modal-btn.danger{
   border:1px solid #5c2a2a;
   background:#2a1214;
@@ -2684,7 +3924,7 @@ onBeforeUnmount(() => {
   height:100%;
   border-radius:999px;
   background:linear-gradient(90deg,var(--is-gold-deep),var(--is-gold));
-  box-shadow:0 0 12px rgba(212,175,55,.35);
+  box-shadow:0 0 12px var(--color-accent-glow-strong);
   transition:width .25s ease;
 }
 .render-progress-pct{margin-top:.55rem;text-align:center;font-weight:800;font-size:1.35rem;color:var(--is-gold);letter-spacing:.04em}

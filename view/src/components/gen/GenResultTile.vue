@@ -1,6 +1,9 @@
 <script setup>
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Loader2, AlertCircle, X, Download, Scaling } from 'lucide-vue-next'
+
+const { t } = useI18n()
 
 const props = defineProps({
   task: { type: Object, required: true },
@@ -16,22 +19,22 @@ const isBusy = computed(() =>
 )
 
 const errorText = computed(() => {
-  const t = String(props.task.error || '').trim()
-  if (!t) return 'Không tạo được'
-  return t.length > 120 ? `${t.slice(0, 117)}…` : t
+  const raw = String(props.task.error || '').trim()
+  if (!raw) return t('gen.tileFailed')
+  return raw.length > 120 ? `${raw.slice(0, 117)}…` : raw
 })
 </script>
 
 <template>
   <article class="gen-tile" :style="{ '--tile-ar': aspectRatio }">
-    <button type="button" class="gen-tile-remove" title="Xóa" @click="emit('remove', task.id)">
+    <button type="button" class="gen-tile-remove" :title="t('common.delete')" @click="emit('remove', task.id)">
       <X :size="14" />
     </button>
 
     <div v-if="isBusy" class="gen-tile-state gen-tile-state--load">
       <Loader2 :size="28" class="gen-tile-spin" />
       <span class="gen-tile-state-label">
-        {{ task.status === 'upscaling' ? 'Upscale 2K…' : 'Đang tạo…' }}
+        {{ task.status === 'upscaling' ? t('gen.tileUpscaling') : t('gen.tileGenerating') }}
       </span>
       <span class="gen-tile-timer">{{ task.elapsedTime }}s</span>
     </div>
@@ -56,12 +59,12 @@ const errorText = computed(() => {
           v-if="showUpscale && !task.isUpscaled"
           type="button"
           class="gen-tile-act"
-          title="Upscale 2K"
+          :title="t('gen.upscale2k')"
           @click="emit('upscale', task)"
         >
           <Scaling :size="15" />
         </button>
-        <button type="button" class="gen-tile-act" title="Tải xuống" @click="emit('download', task)">
+        <button type="button" class="gen-tile-act" :title="t('common.download')" @click="emit('download', task)">
           <Download :size="15" />
         </button>
       </div>

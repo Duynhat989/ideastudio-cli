@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   Plus,
   Settings2,
@@ -12,6 +13,8 @@ import {
 import GenResultTile from './GenResultTile.vue'
 import { BATCH_COUNT_OPTIONS } from '@/composables/useGenBatchTasks.js'
 
+const { t } = useI18n()
+
 const props = defineProps({
   title: { type: String, required: true },
   tasks: { type: Array, default: () => [] },
@@ -23,7 +26,7 @@ const props = defineProps({
   canGenerate: { type: Boolean, default: false },
   isSubmitting: { type: Boolean, default: false },
   showUpscale: { type: Boolean, default: false },
-  promptPlaceholder: { type: String, default: 'Bạn muốn tạo gì?' },
+  promptPlaceholder: { type: String, default: '' },
   accent: { type: String, default: 'image' },
 })
 
@@ -41,6 +44,12 @@ const countMenuOpen = ref(false)
 
 const hasTasks = computed(() => props.tasks.length > 0)
 const emptyIcon = computed(() => (props.mediaType === 'video' ? Video : ImageIcon))
+const resolvedPlaceholder = computed(
+  () => props.promptPlaceholder || t('gen.promptPlaceholderImage'),
+)
+const emptyMediaLabel = computed(() =>
+  props.mediaType === 'video' ? t('gen.emptyMediaVideo') : t('gen.emptyMediaImage'),
+)
 
 const onPromptInput = (e) => emit('update:prompt', e.target.value)
 
@@ -67,8 +76,8 @@ const onPromptKeydown = (e) => {
     <main class="studio-canvas">
       <div v-if="!hasTasks" class="studio-empty">
         <component :is="emptyIcon" :size="48" class="studio-empty-icon" />
-        <p>Nhập prompt và bấm gửi để tạo {{ mediaType === 'video' ? 'video' : 'ảnh' }}</p>
-        <small>Mỗi lần có thể chạy {{ batchCount }} tác vụ song song</small>
+        <p>{{ t('gen.emptyHint', { media: emptyMediaLabel }) }}</p>
+        <small>{{ t('gen.parallelTasks', { count: batchCount }) }}</small>
       </div>
 
       <div v-else class="studio-grid" role="list">
@@ -93,7 +102,7 @@ const onPromptKeydown = (e) => {
             type="button"
             class="studio-dock-icon-btn"
             :class="{ active: settingsOpen }"
-            title="Cấu hình & ảnh tham chiếu"
+            :title="t('gen.settingsRefsTitle')"
             @click="settingsOpen = !settingsOpen"
           >
             <Plus :size="18" />
@@ -101,7 +110,7 @@ const onPromptKeydown = (e) => {
           <textarea
             class="studio-prompt"
             :value="prompt"
-            :placeholder="promptPlaceholder"
+            :placeholder="resolvedPlaceholder"
             rows="1"
             @input="onPromptInput"
             @keydown="onPromptKeydown"
@@ -111,8 +120,8 @@ const onPromptKeydown = (e) => {
         <div v-if="settingsOpen" class="studio-settings-panel">
           <div class="studio-settings-head">
             <Settings2 :size="16" />
-            <span>Cấu hình</span>
-            <button type="button" class="studio-settings-close" @click="settingsOpen = false">Đóng</button>
+            <span>{{ t('gen.settingsTitle') }}</span>
+            <button type="button" class="studio-settings-close" @click="settingsOpen = false">{{ t('common.close') }}</button>
           </div>
           <slot name="settings" />
         </div>
@@ -120,14 +129,14 @@ const onPromptKeydown = (e) => {
         <div class="studio-dock-bar">
           <button type="button" class="studio-pill studio-pill--ghost" @click="settingsOpen = !settingsOpen">
             <Settings2 :size="14" />
-            <span>{{ modelLabel || 'Model' }}</span>
+            <span>{{ modelLabel || t('common.model') }}</span>
           </button>
 
           <div class="studio-count-wrap">
             <button
               type="button"
               class="studio-pill"
-              :title="`Số lượng tạo đồng thời: ${batchCount}`"
+              :title="t('gen.batchCountTitle', { count: batchCount })"
               @click="countMenuOpen = !countMenuOpen"
             >
               <LayoutGrid :size="14" />
@@ -151,7 +160,7 @@ const onPromptKeydown = (e) => {
             type="button"
             class="studio-send"
             :disabled="!canGenerate"
-            title="Tạo"
+            :title="t('gen.generate')"
             @click="submit"
           >
             <ArrowRight :size="20" />

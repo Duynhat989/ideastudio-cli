@@ -1,7 +1,10 @@
 <script setup>
 import { Handle, Position } from '@vue-flow/core';
 import { Zap } from 'lucide-vue-next';
+import { useI18n } from 'vue-i18n';
 import FlowNodeShell from '@/components/FlowNodeShell.vue';
+
+const { t } = useI18n();
 
 const props = defineProps({
   id: String,
@@ -17,7 +20,7 @@ const onDelete = () => emit('delete', props.id);
 <template>
   <div class="start-root">
     <FlowNodeShell
-      label="Bắt đầu"
+      :label="t('flow.startNodeLabel')"
       width="16.5rem"
       :fixed-aspect="false"
       show-delete-button
@@ -30,13 +33,13 @@ const onDelete = () => emit('delete', props.id);
         <div class="start-view">
           <button type="button" class="run-cta" @click="onRun">
             <Zap :size="22" fill="currentColor" />
-            Chạy flow
+            {{ t('flow.runFlow') }}
           </button>
-          <p class="hint">Nhấn để chạy automation từ node này.</p>
+          <p class="hint">{{ t('flow.startHint') }}</p>
         </div>
       </template>
       <template #config>
-        <p class="fn-muted">Node khởi động luồng. Giữ một node Bắt đầu trên canvas để chạy toàn bộ flow.</p>
+        <p class="fn-muted">{{ t('flow.startConfig') }}</p>
       </template>
     </FlowNodeShell>
     <Handle type="source" :position="Position.Right" id="out" />

@@ -76,6 +76,9 @@ import {
     interpolatePromptLines,
 } from '@/services/aiFlowNodeStructures.js';
 import { buildGraphFromStructure } from '@/services/aiFlowGraphBuilder.js';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = defineProps({
     openProjectManagerKey: {
@@ -408,10 +411,10 @@ const restoreFlowHistoryEntry = async (entry) => {
     if (!entry?.snapshot?.nodes) return;
     if (flowHistoryEntries.value[0]?.id === entry.id) return;
     const okRestore = await notify.confirm({
-        title: 'Khôi phục snapshot',
-        message: 'Khôi phục phiên bản này? Toàn bộ canvas hiện tại sẽ bị thay thế.',
-        confirmText: 'Khôi phục',
-        cancelText: 'Hủy',
+        title: t('flow.restoreSnapshotTitle'),
+        message: t('flow.restoreSnapshotMessage'),
+        confirmText: t('flow.restore'),
+        cancelText: t('common.cancel'),
         variant: 'warning',
     });
     if (!okRestore) return;
@@ -441,8 +444,8 @@ const persistFlowToServer = async ({ announce = false } = {}) => {
     if (!currentProjectId.value) {
         if (announce) {
             await notify.alert({
-                title: 'Chưa có project',
-                message: 'Vui lòng chọn hoặc tạo project trước khi lưu.',
+                title: t('flow.noProjectTitle'),
+                message: t('flow.noProjectSave'),
                 variant: 'warning',
             });
         }
@@ -459,8 +462,8 @@ const persistFlowToServer = async ({ announce = false } = {}) => {
         autoSaveError.value = null;
         if (announce) {
             await notify.alert({
-                title: 'Đã lưu',
-                message: 'Đã lưu flow lên server thành công.',
+                title: t('flow.savedTitle'),
+                message: t('flow.savedMessage'),
                 variant: 'success',
             });
         }
@@ -470,7 +473,7 @@ const persistFlowToServer = async ({ announce = false } = {}) => {
         autoSaveError.value = msg;
         if (announce) {
             await notify.alert({
-                title: 'Lưu thất bại',
+                title: t('flow.saveFailedTitle'),
                 message: msg,
                 variant: 'error',
             });
@@ -538,8 +541,8 @@ const importFlow = async (e) => {
         let rawEdges = parsed.edges;
         if (!Array.isArray(rawNodes)) {
             await notify.alert({
-                title: 'JSON không hợp lệ',
-                message: 'File phải có mảng "nodes" (cùng định dạng Export).',
+                title: t('flow.invalidJsonTitle'),
+                message: t('flow.invalidJsonMessage'),
                 variant: 'error',
             });
             return;
@@ -547,10 +550,10 @@ const importFlow = async (e) => {
         if (!Array.isArray(rawEdges)) rawEdges = [];
 
         const okImport = await notify.confirm({
-            title: 'Import flow',
-            message: 'Thay thế flow hiện tại bằng cấu trúc trong file?',
-            confirmText: 'Thay thế',
-            cancelText: 'Hủy',
+            title: t('flow.importTitle'),
+            message: t('flow.importMessage'),
+            confirmText: t('flow.replace'),
+            cancelText: t('common.cancel'),
             variant: 'warning',
         });
         if (!okImport) return;
@@ -566,8 +569,8 @@ const importFlow = async (e) => {
             const type = String(n.type);
             if (!allowedTypes.has(type)) {
                 await notify.alert({
-                    title: 'Loại node không hỗ trợ',
-                    message: `Loại "${type}" không được hỗ trợ.`,
+                    title: t('flow.unsupportedNodeTitle'),
+                    message: t('flow.unsupportedNodeMessage', { type }),
                     variant: 'error',
                 });
                 return;
@@ -576,8 +579,8 @@ const importFlow = async (e) => {
         }
         if (!sanitizedNodes.length) {
             await notify.alert({
-                title: 'Import thất bại',
-                message: 'Không có node hợp lệ để import.',
+                title: t('flow.importFailedTitle'),
+                message: t('flow.importFailedMessage'),
                 variant: 'warning',
             });
             return;
@@ -612,7 +615,7 @@ const importFlow = async (e) => {
         }
     } catch (err) {
         await notify.alert({
-            title: 'Import lỗi',
+            title: t('flow.importErrorTitle'),
             message: err?.message || String(err),
             variant: 'error',
         });
@@ -720,8 +723,8 @@ const handleProjectCreate = async (projectName) => {
         }
     } catch (error) {
         await notify.alert({
-            title: 'Tạo project thất bại',
-            message: error?.message || 'Không thể tạo project.',
+            title: t('flow.createProjectFailed'),
+            message: error?.message || t('flow.createProjectFailedMessage'),
             variant: 'error',
         });
     }
@@ -732,8 +735,8 @@ const handleProjectRename = async ({ id, name }) => {
         await projectService.update(id, { name });
     } catch (error) {
         await notify.alert({
-            title: 'Đổi tên thất bại',
-            message: error?.message || 'Không thể đổi tên project.',
+            title: t('flow.renameFailed'),
+            message: error?.message || t('flow.renameFailedMessage'),
             variant: 'error',
         });
     }
@@ -751,8 +754,8 @@ const handleProjectDelete = async (projectId) => {
         }
     } catch (error) {
         await notify.alert({
-            title: 'Xóa thất bại',
-            message: error?.message || 'Không thể xóa project.',
+            title: t('flow.deleteFailed'),
+            message: error?.message || t('flow.deleteFailedMessage'),
             variant: 'error',
         });
     }
@@ -1686,7 +1689,7 @@ const runAiFlowPromptChatTurn = async ({ transcript, userMessage, imageUrls = []
         return text.trim();
     } catch (e) {
         aiFlowError.value = e?.message || String(e);
-        await notify.alert({ title: 'Gemini lỗi', message: aiFlowError.value, variant: 'error' });
+        await notify.alert({ title: t('flow.geminiError'), message: aiFlowError.value, variant: 'error' });
         throw e;
     } finally {
         aiFlowBusy.value = false;
@@ -1708,8 +1711,8 @@ const runGeminiBuildNodes = async (evt) => {
                 : '';
     if (!script) {
         await notify.alert({
-            title: 'Thiếu nội dung',
-            message: 'Chat với AI để có ý tưởng, rồi bấm Tạo node.',
+            title: t('flow.missingContentTitle'),
+            message: t('flow.missingContentMessage'),
             variant: 'warning',
         });
         return;
@@ -1734,10 +1737,10 @@ const runGeminiBuildNodes = async (evt) => {
         });
         applyAiFlowGraph(graph);
         const summary = graph?.scriptSummary || 'Đã thêm các node và cạnh từ kịch bản.';
-        await notify.alert({ title: 'Đã tạo flow', message: summary, variant: 'success' });
+        await notify.alert({ title: t('flow.flowCreatedTitle'), message: summary, variant: 'success' });
     } catch (e) {
         aiFlowError.value = e?.message || String(e);
-        await notify.alert({ title: 'Không tạo được flow', message: aiFlowError.value, variant: 'error' });
+        await notify.alert({ title: t('flow.flowCreateFailedTitle'), message: aiFlowError.value, variant: 'error' });
     } finally {
         aiFlowBusy.value = false;
     }
@@ -1745,10 +1748,10 @@ const runGeminiBuildNodes = async (evt) => {
 
 const clearFlow = async () => {
     const okClear = await notify.confirm({
-        title: 'Xóa toàn bộ flow',
-        message: 'Xóa hết node và kết nối trong project này?',
-        confirmText: 'Xóa',
-        cancelText: 'Hủy',
+        title: t('flow.clearFlowTitle'),
+        message: t('flow.clearFlowMessage'),
+        confirmText: t('common.delete'),
+        cancelText: t('common.cancel'),
         variant: 'warning',
     });
     if (!okClear) return;
@@ -1806,8 +1809,8 @@ onConnect(async (params) => {
         const allowedImageSources = ['imageInput', 'imageGen'];
         if (!sourceNode || !allowedImageSources.includes(sourceNode.type)) {
             await notify.alert({
-                title: 'Chat AI',
-                message: 'Chat AI chỉ nhận đầu vào ảnh (Image Input hoặc Image Gen).',
+                title: t('flow.chatAiTitle'),
+                message: t('flow.chatAiImageOnly'),
                 variant: 'warning',
             });
             return;
@@ -1821,8 +1824,8 @@ onConnect(async (params) => {
 
         if (incomingImageCount >= 3) {
             await notify.alert({
-                title: 'Chat AI',
-                message: 'Chat AI tối đa 3 ảnh đầu vào.',
+                title: t('flow.chatAiTitle'),
+                message: t('flow.chatAiMaxImages'),
                 variant: 'warning',
             });
             return;
@@ -1832,8 +1835,8 @@ onConnect(async (params) => {
     if (targetNode?.type === 'imageGen' || targetNode?.type === 'videoGen') {
         if (sourceNode && VIDEO_CONTEXT_SOURCE_TYPES.has(sourceNode.type)) {
             await notify.alert({
-                title: 'Kết nối không hợp lệ',
-                message: 'Image Gen / Video Gen chỉ nhận ảnh tham chiếu (Image Input hoặc Image Gen), không nhận output video.',
+                title: t('flow.invalidConnectionTitle'),
+                message: t('flow.invalidConnectionImageVideo'),
                 variant: 'warning',
             });
             return;
@@ -1842,8 +1845,8 @@ onConnect(async (params) => {
 
     if (sourceNode?.type === 'videoPreview' && targetNode?.type !== 'source') {
         await notify.alert({
-            title: 'Kết nối không hợp lệ',
-            message: 'Output của Video Preview chỉ được nối tới node Source.',
+            title: t('flow.invalidConnectionTitle'),
+            message: t('flow.invalidConnectionPreview'),
             variant: 'warning',
         });
         return;
@@ -1851,8 +1854,8 @@ onConnect(async (params) => {
 
     if (targetNode?.type === 'source' && !SOURCE_ALLOWED_INPUT_TYPES.has(sourceNode?.type)) {
         await notify.alert({
-            title: 'Kết nối không hợp lệ',
-            message: 'Node Source chỉ nhận đầu vào từ Image Input, Image Gen, Video Input, Video Gen hoặc Video Preview.',
+            title: t('flow.invalidConnectionTitle'),
+            message: t('flow.invalidConnectionSource'),
             variant: 'warning',
         });
         return;
@@ -1873,11 +1876,11 @@ onConnect(async (params) => {
                 );
                 if (slotTaken) {
                     await notify.alert({
-                        title: 'Sinh video (Frame)',
+                        title: t('flow.frameConnectTitle'),
                         message:
                             th === 'in-start'
-                                ? 'Cổng ảnh Đầu đã có kết nối. Gỡ cạnh cũ trước khi nối ảnh khác.'
-                                : 'Cổng ảnh Cuối đã có kết nối. Gỡ cạnh cũ trước khi nối ảnh khác.',
+                                ? t('flow.frameStartPortTaken')
+                                : t('flow.frameEndPortTaken'),
                         variant: 'warning',
                     });
                     return;
@@ -1886,8 +1889,8 @@ onConnect(async (params) => {
             const incomingVisual = edges.value.filter(isVgVisualRef);
             if (incomingVisual.length >= 2) {
                 await notify.alert({
-                    title: 'Sinh video (Frame)',
-                    message: 'Đã đủ 2 ảnh (Đầu và Cuối). Gỡ một cạnh trước khi nối thêm.',
+                    title: t('flow.frameConnectTitle'),
+                    message: t('flow.frameConnectFull'),
                     variant: 'warning',
                 });
                 return;
@@ -1896,8 +1899,8 @@ onConnect(async (params) => {
             const incomingVisual = edges.value.filter(isVgVisualRef);
             if (incomingVisual.length >= 4) {
                 await notify.alert({
-                    title: 'Sinh video (Thành phần)',
-                    message: 'Tối đa 4 ảnh tham chiếu. Gỡ một cạnh trước khi nối thêm.',
+                    title: t('flow.ingredientConnectTitle'),
+                    message: t('flow.ingredientConnectFull'),
                     variant: 'warning',
                 });
                 return;
@@ -1949,7 +1952,7 @@ watch(() => props.openProjectManagerKey, () => {
 </script>
 <template>
     <div class="app-container">
-        <aside v-if="!isProjectManagerPageOpen && currentProjectId" class="app-sidebar">
+        <aside v-if="!isProjectManagerPageOpen && !isRenderViewOpen && currentProjectId" class="app-sidebar">
             <div class="sidebar-toolbar">
                 <div class="sidebar-header">
                     <div class="sidebar-title-wrap">
@@ -2021,45 +2024,81 @@ watch(() => props.openProjectManagerKey, () => {
 
                 <div class="sidebar-content custom-scrollbar">
                     <div class="action-buttons">
-                        <div class="section-label">Project</div>
-                        <button @click="isProjectManagerPageOpen = true" class="btn-icon btn-zinc"
-                            title="Manage Projects">
-                            <FolderOpen :size="18" />
-                            <span class="btn-text">Projects</span>
-                        </button>
-                        <button @click="isRenderViewOpen = true" class="btn-icon btn-zinc" title="Render">
-                            <Play :size="18" />
-                            <span class="btn-text">Render</span>
-                        </button>
-                        <input type="file" ref="fileInputRef" style="display: none" accept=".json"
-                            @change="importFlow" />
+                        <div class="action-group">
+                            <p class="action-group-label">Workspace</p>
+                            <div class="action-group-track">
+                                <button
+                                    type="button"
+                                    class="action-chip"
+                                    title="Manage Projects"
+                                    @click="isProjectManagerPageOpen = true"
+                                >
+                                    <span class="action-chip-icon"><FolderOpen :size="15" /></span>
+                                    <span class="action-chip-label">Projects</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    class="action-chip action-chip--featured"
+                                    title="Render"
+                                    @click="isRenderViewOpen = true"
+                                >
+                                    <span class="action-chip-icon"><Play :size="15" /></span>
+                                    <span class="action-chip-label">Render</span>
+                                </button>
+                            </div>
+                        </div>
 
-                        <div class="sidebar-divider"></div>
+                        <div class="action-group-sep" aria-hidden="true"></div>
 
-                        <button @click="triggerImport" class="btn-icon btn-zinc" title="Import JSON Structure">
-                            <Upload :size="18" />
-                            <span class="btn-text">Import</span>
-                        </button>
-                        <button @click="exportFlow" class="btn-icon btn-zinc" title="Export JSON Structure">
-                            <Download :size="18" />
-                            <span class="btn-text">Export</span>
-                        </button>
-                        <button
-                            type="button"
-                            class="btn-icon btn-zinc"
-                            title="Cài đặt workflow"
-                            @click="isWorkflowSettingsOpen = true"
-                        >
-                            <Settings :size="18" />
-                            <span class="btn-text">Cài đặt</span>
-                        </button>
-                        <button type="button" class="btn-icon btn-zinc"
-                            :class="{ 'btn-history-active': historyPanelOpen }" title="Show or hide edit history"
-                            @click="historyPanelOpen = !historyPanelOpen">
-                            <History :size="18" />
-                            <span class="btn-text">History</span>
-                        </button>
-
+                        <div class="action-group">
+                            <p class="action-group-label">Flow</p>
+                            <div class="action-group-track">
+                                <input
+                                    type="file"
+                                    ref="fileInputRef"
+                                    style="display: none"
+                                    accept=".json"
+                                    @change="importFlow"
+                                />
+                                <button
+                                    type="button"
+                                    class="action-chip"
+                                    title="Import JSON Structure"
+                                    @click="triggerImport"
+                                >
+                                    <span class="action-chip-icon"><Upload :size="15" /></span>
+                                    <span class="action-chip-label">Import</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    class="action-chip"
+                                    title="Export JSON Structure"
+                                    @click="exportFlow"
+                                >
+                                    <span class="action-chip-icon"><Download :size="15" /></span>
+                                    <span class="action-chip-label">Export</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    class="action-chip"
+                                    :title="t('flow.workflowSettings')"
+                                    @click="isWorkflowSettingsOpen = true"
+                                >
+                                    <span class="action-chip-icon"><Settings :size="15" /></span>
+                                    <span class="action-chip-label">{{ t('flow.workflowSettingsBtn') }}</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    class="action-chip"
+                                    :class="{ 'action-chip--active': historyPanelOpen }"
+                                    title="Show or hide edit history"
+                                    @click="historyPanelOpen = !historyPanelOpen"
+                                >
+                                    <span class="action-chip-icon"><History :size="15" /></span>
+                                    <span class="action-chip-label">History</span>
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -2446,12 +2485,6 @@ watch(() => props.openProjectManagerKey, () => {
     line-height: 1.35;
 }
 
-.btn-history-active {
-    border-color: #ca8a04 !important;
-    color: #facc15 !important;
-    box-shadow: 0 0 0 1px rgba(250, 204, 21, 0.2);
-}
-
 .sidebar-header {
     display: flex;
     align-items: center;
@@ -2487,52 +2520,151 @@ watch(() => props.openProjectManagerKey, () => {
 .sidebar-content {
     padding: 0;
     display: flex;
-    align-items: center;
+    align-items: stretch;
     width: auto;
-}
-
-.sidebar-divider {
-    width: 1px;
-    height: 1.55rem;
-    background: linear-gradient(180deg, transparent, #2f2f35, transparent);
-    margin: 0 0.3rem;
-}
-
-.section-label {
-    display: block;
-    font-size: 0.6rem;
-    font-weight: 800;
-    color: #a1a1aa;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    white-space: nowrap;
-    padding: 0.18rem 0.4rem;
-    border: 1px solid #2a2d36;
-    border-radius: 999px;
-    background: rgba(24, 24, 27, 0.62);
+    min-width: 0;
 }
 
 .action-buttons {
     display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: 0.45rem;
+    align-items: flex-end;
+    gap: 0.85rem;
     flex-wrap: wrap;
     width: 100%;
-    padding: 0.5rem 0.55rem;
-    border: 1px solid #27272f;
-    border-radius: 0.85rem;
-    background: rgba(9, 9, 11, 0.55);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
-    overflow-x: auto;
-    max-width: 100%;
+    padding: 0.55rem 0.65rem;
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    background:
+        linear-gradient(180deg, var(--color-bg-elevated) 0%, color-mix(in srgb, var(--color-bg) 92%, transparent) 100%);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.04),
+        0 4px 18px rgba(0, 0, 0, 0.16);
 }
 
-.btn-text {
-    font-size: 0.8125rem;
+.action-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    min-width: 0;
+}
+
+.action-group-label {
+    margin: 0;
+    padding: 0 0.15rem;
+    font-size: 0.58rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+    line-height: 1;
+}
+
+.action-group-track {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 3px;
+    padding: 3px;
+    border-radius: 10px;
+    border: 1px solid var(--color-border);
+    background: var(--color-bg);
+}
+
+.action-group-sep {
+    align-self: stretch;
+    width: 1px;
+    margin: 0.15rem 0 0.1rem;
+    background: linear-gradient(
+        180deg,
+        transparent 0%,
+        var(--color-border) 18%,
+        var(--color-border) 82%,
+        transparent 100%
+    );
+}
+
+.action-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.42rem;
+    height: 30px;
+    padding: 0 0.62rem 0 0.38rem;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--color-text-muted);
+    font-size: 0.74rem;
     font-weight: 600;
     letter-spacing: -0.01em;
+    cursor: pointer;
+    transition:
+        background 0.16s ease,
+        border-color 0.16s ease,
+        color 0.16s ease,
+        box-shadow 0.16s ease,
+        transform 0.16s ease;
     white-space: nowrap;
+}
+
+.action-chip:hover {
+    background: var(--color-bg-soft);
+    border-color: color-mix(in srgb, var(--color-border) 80%, white);
+    color: var(--color-text);
+}
+
+.action-chip:active {
+    transform: scale(0.98);
+}
+
+.action-chip-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    background: var(--color-bg-soft);
+    color: inherit;
+    flex-shrink: 0;
+    transition: background 0.16s ease, color 0.16s ease;
+}
+
+.action-chip:hover .action-chip-icon {
+    background: var(--color-accent-soft);
+    color: var(--color-accent);
+}
+
+.action-chip-label {
+    line-height: 1;
+}
+
+.action-chip--featured {
+    background: var(--color-accent-soft);
+    border-color: color-mix(in srgb, var(--color-accent) 22%, transparent);
+    color: var(--color-accent);
+}
+
+.action-chip--featured .action-chip-icon {
+    background: color-mix(in srgb, var(--color-accent) 18%, transparent);
+    color: var(--color-accent);
+}
+
+.action-chip--featured:hover {
+    background: color-mix(in srgb, var(--color-accent-soft) 85%, var(--color-accent) 15%);
+    border-color: color-mix(in srgb, var(--color-accent) 35%, transparent);
+    color: var(--color-accent-strong);
+}
+
+.action-chip--active {
+    background: var(--color-accent-soft);
+    border-color: color-mix(in srgb, var(--color-accent) 30%, transparent);
+    color: var(--color-accent);
+    box-shadow: 0 0 0 1px var(--color-accent-bg-fade-2);
+}
+
+.action-chip--active .action-chip-icon {
+    background: color-mix(in srgb, var(--color-accent) 20%, transparent);
+    color: var(--color-accent);
 }
 
 .add-menu-container {
@@ -2643,17 +2775,6 @@ watch(() => props.openProjectManagerKey, () => {
     background: linear-gradient(135deg, #fde047 0%, #eab308 100%);
     transform: translateY(-1px);
     box-shadow: 0 12px 24px rgba(250, 204, 21, 0.34);
-}
-
-.btn-zinc {
-    background-color: #18181b;
-    color: #a1a1aa;
-    border: 1px solid #27272a;
-}
-
-.btn-zinc:hover {
-    background-color: #27272a;
-    color: #f4f4f5;
 }
 
 .mr-2 {
@@ -2817,48 +2938,6 @@ watch(() => props.openProjectManagerKey, () => {
 .select:focus {
     border-color: var(--color-accent-strong);
     box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.1);
-}
-
-.btn-icon {
-    padding: 0.6rem 0.8rem;
-    border-radius: 0.625rem;
-    cursor: pointer;
-    transition: all 0.2s;
-    border: 1px solid #2f2f36;
-    background: linear-gradient(180deg, #202026 0%, #17171c 100%);
-    color: #d4d4d8;
-    display: flex;
-    align-items: center;
-    gap: 0.875rem;
-    width: auto;
-    flex: 0 0 auto;
-}
-
-.btn-icon:hover {
-    background: linear-gradient(180deg, #2a2a31 0%, #1f1f24 100%);
-    color: #fff;
-    border-color: #3a3a44;
-}
-
-.btn-icon.btn-primary {
-    background-color: rgba(14, 165, 233, 0.1);
-    color: var(--color-accent-strong);
-    border-color: rgba(255, 202, 42, 0.2);
-}
-
-.btn-icon.btn-primary:hover {
-    background-color: rgba(255, 202, 42, 0.2);
-    color: #38bdf8;
-}
-
-.btn-icon.btn-red {
-    background-color: rgba(239, 68, 68, 0.05);
-    color: #f87171;
-}
-
-.btn-icon.btn-red:hover {
-    background-color: rgba(239, 68, 68, 0.15);
-    color: #ef4444;
 }
 
 .btn-red {

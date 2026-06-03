@@ -1,5 +1,6 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
     Sparkles,
     ArrowRight,
@@ -10,6 +11,7 @@ import {
 } from 'lucide-vue-next'
 import { runtime } from '@/services/runtime'
 
+const { t } = useI18n()
 const emit = defineEmits(['login-success'])
 
 const API_BASE = runtime.origin
@@ -112,7 +114,7 @@ async function finishWithAccessToken(accessToken) {
         view.value = 'choose'
         sessionToken.value = ''
     } else {
-        errorMessage.value = 'Account token is invalid or expired. Please try again.'
+        errorMessage.value = t('auth.tokenInvalid')
         view.value = 'choose'
         sessionToken.value = ''
     }
@@ -137,7 +139,7 @@ async function startNanoSignIn() {
     try {
         await registerSession(token)
     } catch (e) {
-        errorMessage.value = e.message || 'Cannot reach local server. Is the app running?'
+        errorMessage.value = e.message || t('auth.serverUnreachable')
         sessionToken.value = ''
         return
     }
@@ -194,19 +196,19 @@ onUnmounted(() => {
                     <Sparkles :size="28" class="brand-icon" />
                 </div>
                 <h1>IdeaStudio</h1>
-                <p>Sign in with your Nano AI account</p>
+                <p>{{ t('auth.subtitle') }}</p>
             </div>
 
             <div v-if="view === 'choose'" class="panel">
                 <span v-if="errorMessage" class="error-text">{{ errorMessage }}</span>
                 <button type="button" class="submit-btn" :disabled="isLoading" @click="startNanoSignIn">
                     <span v-if="!isLoading" class="btn-content">
-                        Continue with Nano AI
+                        {{ t('auth.continueNano') }}
                         <ArrowRight :size="18" />
                     </span>
                     <span v-else class="btn-content">
                         <Loader2 :size="18" class="spin" />
-                        Checking session…
+                        {{ t('auth.checkingSession') }}
                     </span>
                 </button>
             </div>
@@ -215,8 +217,8 @@ onUnmounted(() => {
                 <div class="wait-banner">
                     <Loader2 :size="22" class="spin accent" />
                     <div>
-                        <strong>Waiting for Nano AI</strong>
-                        <p class="sub">Finish sign-in in your browser. This screen will continue automatically.</p>
+                        <strong>{{ t('auth.waitingTitle') }}</strong>
+                        <p class="sub">{{ t('auth.waitingHint') }}</p>
                     </div>
                 </div>
 
@@ -225,18 +227,18 @@ onUnmounted(() => {
                 <div class="row-actions">
                     <button type="button" class="ghost-btn" @click="goBackFromWaiting">
                         <ChevronLeft :size="18" />
-                        Back
+                        {{ t('auth.back') }}
                     </button>
                     <button type="button" class="linkish" @click="openSignInUrl(`${NANO_SIGNIN_BASE}?token=${encodeURIComponent(sessionToken)}`)">
                         <ExternalLink :size="16" />
-                        Open sign-in again
+                        {{ t('auth.openSignInAgain') }}
                     </button>
                 </div>
             </div>
 
             <div class="card-footer">
                 <ShieldCheck :size="14" />
-                <span>Encrypted connection to Nano AI APIs</span>
+                <span>{{ t('auth.footer') }}</span>
             </div>
         </main>
     </div>

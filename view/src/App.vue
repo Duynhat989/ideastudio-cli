@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref, onMounted, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import Sidebar from './components/Sidebar.vue'
 import FlowAI from './pages/FlowAI.vue'
 import GenImage from './pages/GenImage.vue'
@@ -14,6 +15,8 @@ import { hasVeo3VideoConfigured } from './utils/veoSetup.js'
 import { notify } from './composables/useNotify.js'
 
 import logo_app from './assets/logo.ico'
+
+const { t } = useI18n()
 
 // --- State ---
 const isLoading = ref(true)
@@ -138,10 +141,9 @@ onMounted(() => {
 			const current = url.searchParams.get('current_version') || 'current'
 			const latest = url.searchParams.get('latest_version') || 'latest'
 			await notify.alert({
-				title: 'Update available',
-				message: `A newer version is available (${current} -> ${latest}).\nRun: npm update -g ideastudio-cli`,
+				title: t('app.updateTitle'),
+				message: t('app.updateMessage', { current, latest }),
 				variant: 'warning',
-				confirmText: 'OK',
 			})
 			url.searchParams.delete('update_available')
 			url.searchParams.delete('current_version')
@@ -217,17 +219,16 @@ onMounted(() => {
 				@click.self="dismissVeoModal"
 			>
 				<div class="veo-setup-card" @click.stop>
-					<h2 id="veo-setup-title" class="veo-setup-title">Chưa cấu hình Veo 3</h2>
+					<h2 id="veo-setup-title" class="veo-setup-title">{{ t('app.veoNotConfiguredTitle') }}</h2>
 					<p class="veo-setup-text">
-						Gen Video và Workflow Video cần tài khoản Veo trong Cài đặt (ít nhất token và cookie cho tài khoản đầu tiên).
-						Vui lòng thêm cấu hình rồi quay lại.
+						{{ t('app.veoNotConfiguredMessage') }}
 					</p>
 					<div class="veo-setup-actions">
 						<button type="button" class="veo-setup-btn veo-setup-btn-muted" @click="dismissVeoModal">
-							Để sau
+							{{ t('app.veoLater') }}
 						</button>
 						<button type="button" class="veo-setup-btn veo-setup-btn-primary" @click="goToSetupFromVeoModal">
-							Mở Cài đặt
+							{{ t('app.veoOpenSetup') }}
 						</button>
 					</div>
 				</div>

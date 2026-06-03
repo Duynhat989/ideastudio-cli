@@ -1,5 +1,6 @@
 <script setup>
 import { inject, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useFlowNodeGenTimer } from '../composables/useFlowNodeGenTimer.js';
 import { shouldUseVideoPreview } from '@/utils/flowMedia.js';
 import { Handle, Position } from '@vue-flow/core';
@@ -15,6 +16,7 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['delete']);
+const { t } = useI18n();
 const openImage = inject('openImage');
 
 const nodeStatus = computed(() => props.data?.status ?? 'idle');
@@ -73,10 +75,10 @@ const copyError = async () => {
         <div v-if="data.result" class="media-fill tap-open" @click="openImage(data.result)">
           <img :src="data.result" alt="" />
           <div class="hover-actions">
-            <button type="button" class="mini-act" title="Tải xuống" @click.stop="onDownload">
+            <button type="button" class="mini-act" :title="t('common.download')" @click.stop="onDownload">
               <Download :size="15" />
             </button>
-            <button type="button" class="mini-act danger" title="Xóa kết quả" @click.stop="onClear">
+            <button type="button" class="mini-act danger" :title="t('flow.clearResult')" @click.stop="onClear">
               <Trash2 :size="15" />
             </button>
           </div>
@@ -87,7 +89,7 @@ const copyError = async () => {
             <Loader2 :size="18" class="node-gen-spin" />
             Đang tạo… {{ elapsedLabel }}
           </span>
-          <span v-else class="idle-msg">Bấm nút chạy phía dưới · ⚙ chỉnh prompt và model</span>
+          <span v-else class="idle-msg">{{ t('flow.runBelow') }}</span>
         </div>
       </template>
       <template #config>
@@ -128,7 +130,7 @@ const copyError = async () => {
           </select>
         </div>
         <div v-if="data.inputs?.length">
-          <label class="fn-label">Ngữ cảnh ({{ data.inputs.length }})</label>
+          <label class="fn-label">{{ t('common.context', { count: data.inputs.length }) }}</label>
           <div class="fn-preview-scroll">
             <div
               v-for="(img, idx) in data.inputs"
@@ -144,7 +146,7 @@ const copyError = async () => {
             </div>
           </div>
         </div>
-        <button type="button" class="fn-btn fn-btn-ghost" @click="onDuplicate">Nhân đôi</button>
+        <button type="button" class="fn-btn fn-btn-ghost" @click="onDuplicate">{{ t('common.duplicate') }}</button>
         <button v-if="data.error" type="button" class="fn-error" @click="copyError">{{ data.error }}</button>
       </template>
       <template #run>

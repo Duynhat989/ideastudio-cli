@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import {
   FolderOpen,
   Plus,
@@ -19,6 +20,8 @@ import { projectService } from '@/services/project.service';
 import { notify } from '@/composables/useNotify.js';
 import demoThumb from '@/assets/demo.png';
 
+const { t } = useI18n();
+
 const props = defineProps({
   currentProjectId: String,
 });
@@ -36,22 +39,22 @@ const editingId = ref('');
 const editingName = ref('');
 const createModalOpen = ref(false);
 
-const aspectOptions = [
+const aspectOptions = computed(() => [
   {
     value: 'portrait',
     label: '9:16',
-    hint: 'Dọc',
-    desc: 'TikTok, Reels, Shorts',
+    hint: t('project.aspectPortrait'),
+    desc: t('project.aspectPortraitHint'),
     Icon: Smartphone,
   },
   {
     value: 'landscape',
     label: '16:9',
-    hint: 'Ngang',
-    desc: 'YouTube, TV, web',
+    hint: t('project.aspectLandscape'),
+    desc: t('project.aspectLandscapeHint'),
     Icon: Monitor,
   },
-];
+]);
 
 const aspectLabel = (preset) => {
   const p = String(preset || 'portrait').toLowerCase();
@@ -87,8 +90,8 @@ const filteredProjects = computed(() => {
 
 const projectCountLabel = computed(() => {
   const n = filteredProjects.value.length;
-  if (n === 0) return 'Chưa có project';
-  return `${n} project`;
+  if (n === 0) return t('project.none');
+  return t('project.count', { n });
 });
 
 const createProject = async () => {
@@ -139,10 +142,10 @@ const saveRename = async (id) => {
 
 const removeProject = async (id) => {
   const ok = await notify.confirm({
-    title: 'Xóa project',
-    message: 'Xóa project này và toàn bộ assets?',
-    confirmText: 'Xóa',
-    cancelText: 'Hủy',
+    title: t('project.deleteTitle'),
+    message: t('project.deleteMessage'),
+    confirmText: t('common.delete'),
+    cancelText: t('common.cancel'),
     variant: 'warning',
   });
   if (!ok) return;
@@ -173,8 +176,8 @@ onMounted(loadProjects);
               <Sparkles :size="13" class="pm-eyebrow-ic" aria-hidden="true" />
               Flow AI
             </p>
-            <h2 class="pm-title">Project Manager</h2>
-            <p class="pm-sub">Quản lý workflow canvas — chọn project để tiếp tục hoặc tạo mới.</p>
+            <h2 class="pm-title">{{ t('project.managerTitle') }}</h2>
+            <p class="pm-sub">{{ t('project.subtitle') }}</p>
           </div>
         </div>
         <div class="pm-hero-stats">
@@ -192,24 +195,24 @@ onMounted(loadProjects);
             v-model="search"
             type="search"
             class="pm-search-input"
-            placeholder="Tìm theo tên hoặc mô tả…"
+            :placeholder="t('project.searchPlaceholder')"
             autocomplete="off"
           />
         </div>
-        <select v-model="sortBy" class="pm-select" aria-label="Sắp xếp">
-          <option value="updated">Mới cập nhật</option>
-          <option value="name">Tên A–Z</option>
+        <select v-model="sortBy" class="pm-select" :aria-label="t('project.sortLabel')">
+          <option value="updated">{{ t('project.sortUpdated') }}</option>
+          <option value="name">{{ t('project.sortName') }}</option>
         </select>
         <button type="button" class="pm-create-btn" @click="openCreateModal">
           <Plus :size="17" stroke-width="2.5" />
-          <span>Tạo project</span>
+          <span>{{ t('project.createProject') }}</span>
         </button>
       </div>
 
       <main class="pm-main">
         <div v-if="loading" class="pm-state pm-state--load">
           <Loader2 :size="32" class="pm-spin" aria-hidden="true" />
-          <p>Đang tải project…</p>
+          <p>{{ t('project.loading') }}</p>
         </div>
 
         <div v-else-if="filteredProjects.length === 0" class="pm-state pm-state--empty">
@@ -218,11 +221,11 @@ onMounted(loadProjects);
               <FolderOpen :size="40" stroke-width="1.25" />
             </div>
           </div>
-          <h3 class="pm-empty-title">Chưa có project nào</h3>
-          <p class="pm-empty-text">Tạo project đầu tiên để bắt đầu xây dựng workflow AI của bạn.</p>
+          <h3 class="pm-empty-title">{{ t('project.emptyTitle') }}</h3>
+          <p class="pm-empty-text">{{ t('project.emptyText') }}</p>
           <button type="button" class="pm-empty-cta" @click="openCreateModal">
             <Plus :size="16" />
-            Tạo project mới
+            {{ t('project.createNew') }}
           </button>
         </div>
 
@@ -236,7 +239,7 @@ onMounted(loadProjects);
             <button
               type="button"
               class="pm-card-open"
-              :aria-label="`Mở project ${project.name}`"
+              :aria-label="t('project.openProject', { name: project.name })"
               @click="emit('load', project.id)"
             >
               <div class="pm-card-media">
@@ -266,10 +269,10 @@ onMounted(loadProjects);
                 <template v-else>
                   <div class="pm-card-head">
                     <h3 class="pm-card-title">{{ project.name }}</h3>
-                    <span v-if="currentProjectId === project.id" class="pm-active-badge">Đang mở</span>
+                    <span v-if="currentProjectId === project.id" class="pm-active-badge">{{ t('project.activeBadge') }}</span>
                   </div>
                   <p v-if="project.description" class="pm-card-desc">{{ project.description }}</p>
-                  <p v-else class="pm-card-desc pm-card-desc--muted">Chưa có mô tả</p>
+                  <p v-else class="pm-card-desc pm-card-desc--muted">{{ t('project.noDescription') }}</p>
                   <div class="pm-card-foot">
                     <span class="pm-ratio-pill">{{ aspectLabel(project.aspectPreset) }}</span>
                     <span class="pm-card-date">
@@ -284,10 +287,10 @@ onMounted(loadProjects);
             </button>
 
             <div v-if="editingId !== project.id" class="pm-card-actions">
-              <button type="button" class="pm-icon" title="Đổi tên" @click.stop="startRename(project)">
+              <button type="button" class="pm-icon" :title="t('project.rename')" @click.stop="startRename(project)">
                 <Edit2 :size="14" />
               </button>
-              <button type="button" class="pm-icon pm-icon--danger" title="Xóa" @click.stop="removeProject(project.id)">
+              <button type="button" class="pm-icon pm-icon--danger" :title="t('common.delete')" @click.stop="removeProject(project.id)">
                 <Trash2 :size="14" />
               </button>
             </div>
@@ -302,40 +305,40 @@ onMounted(loadProjects);
           <div class="pm-modal-card" role="dialog" aria-labelledby="create-heading">
             <header class="pm-modal-header">
               <div>
-                <p id="create-heading" class="pm-modal-eyebrow">Project mới</p>
-                <h3 class="pm-modal-title">Tạo workflow</h3>
+                <p id="create-heading" class="pm-modal-eyebrow">{{ t('project.newEyebrow') }}</p>
+                <h3 class="pm-modal-title">{{ t('project.createModalTitle') }}</h3>
               </div>
-              <button type="button" class="pm-modal-close" aria-label="Đóng" @click="closeCreateModal">
+              <button type="button" class="pm-modal-close" :aria-label="t('common.close')" @click="closeCreateModal">
                 <X :size="18" />
               </button>
             </header>
 
             <div class="pm-modal-body">
               <label class="pm-field">
-                <span class="pm-label">Tên project</span>
+                <span class="pm-label">{{ t('project.projectName') }}</span>
                 <input
                   v-model="newProjectName"
                   type="text"
                   class="pm-input"
-                  placeholder="VD: Campaign Tết 2026"
+                  :placeholder="t('project.projectNamePlaceholder')"
                   autofocus
                   @keyup.enter="createProject"
                 />
               </label>
 
               <label class="pm-field">
-                <span class="pm-label">Mô tả <span class="pm-optional">(tuỳ chọn)</span></span>
+                <span class="pm-label">{{ t('project.description') }} <span class="pm-optional">({{ t('common.optional') }})</span></span>
                 <textarea
                   v-model="newProjectDescription"
                   class="pm-textarea"
                   rows="2"
-                  placeholder="Ghi chú ngắn cho team…"
+                  :placeholder="t('project.descriptionPlaceholder')"
                 />
               </label>
 
               <div class="pm-field">
-                <span class="pm-label">Tỷ lệ canvas mặc định</span>
-                <div class="pm-aspect-grid" role="radiogroup" aria-label="Tỷ lệ">
+                <span class="pm-label">{{ t('project.canvasAspect') }}</span>
+                <div class="pm-aspect-grid" role="radiogroup" :aria-label="t('project.canvasAspect')">
                   <button
                     v-for="opt in aspectOptions"
                     :key="opt.value"
@@ -360,10 +363,10 @@ onMounted(loadProjects);
             </div>
 
             <footer class="pm-modal-footer">
-              <button type="button" class="pm-cancel" @click="closeCreateModal">Hủy</button>
+              <button type="button" class="pm-cancel" @click="closeCreateModal">{{ t('project.cancel') }}</button>
               <button type="button" class="pm-submit" :disabled="!newProjectName.trim()" @click="createProject">
                 <Plus :size="17" stroke-width="2.5" />
-                Tạo project
+                {{ t('project.create') }}
               </button>
             </footer>
           </div>

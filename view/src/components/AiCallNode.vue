@@ -1,5 +1,6 @@
 <script setup>
 import { inject, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useFlowNodeGenTimer } from '../composables/useFlowNodeGenTimer.js';
 import { shouldUseVideoPreview } from '@/utils/flowMedia.js';
 import { Handle, Position } from '@vue-flow/core';
@@ -12,6 +13,7 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['delete']);
+const { t } = useI18n();
 const openImage = inject('openImage');
 
 const onRun = () => props.data.onRun?.();
@@ -40,7 +42,7 @@ const { elapsedLabel } = useFlowNodeGenTimer(nodeStatus);
         <div class="media-fill result-pane">
           <template v-if="data.result">
             <div class="text-scroll custom-scrollbar" @click.stop>{{ data.result }}</div>
-            <button type="button" class="clear-fab" title="Xóa kết quả" @click.stop="onClear">×</button>
+            <button type="button" class="clear-fab" :title="t('flow.clearResult')" @click.stop="onClear">×</button>
           </template>
           <div v-else class="idle-preview">
             <Cpu :size="38" class="idle-ic" />
@@ -48,7 +50,7 @@ const { elapsedLabel } = useFlowNodeGenTimer(nodeStatus);
               <Loader2 :size="18" class="node-gen-spin" />
               Đang gọi… {{ elapsedLabel }}
             </span>
-            <span v-else class="idle-msg">Bấm nút gọi AI phía dưới · ⚙ chỉnh prompt</span>
+            <span v-else class="idle-msg">{{ t('flow.runAiBelow') }}</span>
           </div>
         </div>
       </template>
@@ -89,7 +91,7 @@ const { elapsedLabel } = useFlowNodeGenTimer(nodeStatus);
           />
         </div>
         <div v-if="data.inputs?.length">
-          <label class="fn-label">Ngữ cảnh ({{ data.inputs.length }})</label>
+          <label class="fn-label">{{ t('common.context', { count: data.inputs.length }) }}</label>
           <div class="fn-preview-scroll">
             <div
               v-for="(img, idx) in data.inputs"

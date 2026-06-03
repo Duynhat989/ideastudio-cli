@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Upload } from 'lucide-vue-next'
 import GenStudioShell from '@/components/gen/GenStudioShell.vue'
 import { getSettings } from '@/services/nanoai'
@@ -15,6 +16,8 @@ import { videoAspectToCss } from '@/utils/genAspectRatio.js'
 import { sanitizeVideoPromptForSafety, isPolicyBlockedError } from '@/utils/flowPromptSafety.js'
 import { useGenBatchTasks } from '@/composables/useGenBatchTasks.js'
 import { notify } from '@/composables/useNotify.js'
+
+const { t } = useI18n()
 
 const prompt = ref('')
 const videoType = ref('frame')
@@ -47,10 +50,10 @@ const canGenerate = computed(() => Boolean(prompt.value.trim()))
 
 const slotLabels = computed(() => {
   if (isFrameMode.value) {
-    if (inputImages.value.length <= 1) return ['Đầu']
-    return ['Đầu', 'Cuối']
+    if (inputImages.value.length <= 1) return [t('common.start')]
+    return [t('common.start'), t('common.end')]
   }
-  return inputImages.value.map((_, i) => `TP ${i + 1}`)
+  return inputImages.value.map((_, i) => t('gen.refSlot', { n: i + 1 }))
 })
 
 watch(videoType, () => {
@@ -133,14 +136,14 @@ const extractFlowTaskErrorMessage = (payload) => {
 }
 
 const formatFlowErrorText = (text) => {
-  const t = String(text || '')
-  if (t.includes('PUBLIC_ERROR_PROMINENT_PEOPLE')) {
-    return 'Ảnh tham chiếu có thể chứa người nổi tiếng. Vui lòng đổi ảnh khác.'
+  const raw = String(text || '')
+  if (raw.includes('PUBLIC_ERROR_PROMINENT_PEOPLE')) {
+    return t('gen.policyProminentPeople')
   }
-  if (t.includes('PUBLIC_ERROR_SEXUAL') || t.includes('NCII')) {
-    return 'Nội dung bị từ chối bởi chính sách an toàn. Hãy đổi prompt hoặc ảnh tham chiếu.'
+  if (raw.includes('PUBLIC_ERROR_SEXUAL') || raw.includes('NCII')) {
+    return t('gen.policySafety')
   }
-  return t.trim()
+  return raw.trim()
 }
 
 const throwFlowTaskError = (payload) => {
@@ -150,14 +153,15 @@ const throwFlowTaskError = (payload) => {
   throw err
 }
 
-const extractErrMessage = (err, fallback = 'Lỗi tạo video') => {
-  if (!err) return fallback
+const extractErrMessage = (err, fallback) => {
+  const fb = fallback ?? t('gen.errorVideo')
+  if (!err) return fb
   if (err?.flowPayload) {
     const fromPayload = formatFlowErrorText(extractFlowTaskErrorMessage(err.flowPayload))
     if (fromPayload) return fromPayload
   }
   const msg = formatFlowErrorText(String(err?.message || '').trim())
-  return msg || fallback
+  return msg || fb
 }
 
 const isInternalRetryable = (err) =>
@@ -199,10 +203,11 @@ const succeedTask = (task, patch) => {
   patchGenTask(task, { status: 'success', error: null, ...patch })
 }
 
-const ensureTaskSettled = (task, fallback = 'Không nhận được kết quả từ API') => {
+const ensureTaskSettled = (task, fallback) => {
+  const fb = fallback ?? t('gen.noApiResult')
   const live = getLiveTask(task)
   if (live.status === 'generating' || live.status === 'upscaling') {
-    failTask(live, new Error(fallback), fallback)
+    failTask(live, new Error(fb), fb)
   }
 }
 
@@ -318,7 +323,7 @@ const runVideoTask = async (
           tier: videoTier.value,
         })
         if (!resultUrl || typeof resultUrl !== 'string') {
-          throw new Error('API trả về thành công nhưng thiếu URL video')
+          throw new Error(t('gen.successNoVideoUrl'))
         }
         succeedTask(task, {
           result: resultUrl,
@@ -356,8 +361,8 @@ const handleGenerate = async () => {
   const settings = getSettings()
   if (!settings.nanoToken || !settings.videoAccessToken || !settings.videoCookie) {
     await notify.alert({
-      title: 'Chưa cấu hình Veo',
-      message: 'Vui lòng cấu hình Nano API và tài khoản Veo (token + cookie) trong mục Setup.',
+      title: t('gen.notConfiguredVideoTitle'),
+      message: t('gen.notConfiguredVideo'),
       variant: 'warning',
     })
     return
@@ -388,7 +393,7 @@ const handleGenerate = async () => {
         runVideoTask(task, base64Inputs, currentPrompt, currentModel, currentRatio, currentType),
       ),
     )
-    settleStuckSlots(slots, new Error('Tạo video không hoàn tất'))
+    settleStuckSlots(slots, new Error(t('gen.videoIncomplete')))
   } catch (err) {
     settleStuckSlots(slots, err)
   } finally {
@@ -428,7 +433,7 @@ const handleDownload = async (task) => {
     />
 
     <GenStudioShell
-      title="Gen Video"
+      :title="t('nav.genVideo')"
       media-type="video"
       accent="video"
       :tasks="tasks"
@@ -438,7 +443,7 @@ const handleDownload = async (task) => {
       :model-label="modelLabel"
       :can-generate="canGenerate"
       :is-submitting="isSubmitting"
-      prompt-placeholder="Mô tả video bạn muốn tạo…"
+      :prompt-placeholder="t('gen.promptPlaceholderVideo')"
       @update:prompt="prompt = $event"
       @update:batch-count="batchCount = $event"
       @generate="handleGenerate"
@@ -448,15 +453,15 @@ const handleDownload = async (task) => {
       <template #settings>
         <div class="cfg-block">
           <div class="cfg-head">
-            <span>Ảnh tham chiếu</span>
-            <button v-if="inputImages.length" type="button" class="cfg-clear" @click="clearRefs">Xóa</button>
+            <span>{{ t('gen.referenceImages') }}</span>
+            <button v-if="inputImages.length" type="button" class="cfg-clear" @click="clearRefs">{{ t('common.delete') }}</button>
           </div>
           <p class="cfg-hint">
-            {{ isFrameMode ? 'Frame: tối đa 2 ảnh (đầu & cuối).' : 'Ingredient: tối đa 4 ảnh.' }}
+            {{ isFrameMode ? t('gen.frameModeHint') : t('gen.ingredientModeHint') }}
           </p>
           <div v-if="!inputImages.length" class="cfg-upload" @click="triggerUpload">
             <Upload :size="18" />
-            <span>Thêm ảnh (tùy chọn)</span>
+            <span>{{ t('gen.addImageOptional') }}</span>
           </div>
           <div v-else class="cfg-thumbs">
             <div v-for="(img, idx) in inputImages" :key="idx" class="cfg-thumb-wrap">
@@ -475,18 +480,18 @@ const handleDownload = async (task) => {
           </div>
         </div>
 
-        <label class="cfg-label">Kiểu đầu vào</label>
+        <label class="cfg-label">{{ t('gen.inputType') }}</label>
         <select v-model="videoType" class="cfg-select">
-          <option value="frame">Frame — đầu &amp; cuối</option>
-          <option value="ingredient">Ingredient — tham chiếu</option>
+          <option value="frame">{{ t('gen.frameOption') }}</option>
+          <option value="ingredient">{{ t('gen.ingredientOption') }}</option>
         </select>
 
-        <label class="cfg-label">Model video</label>
+        <label class="cfg-label">{{ t('gen.videoModel') }}</label>
         <select v-model="videoModel" class="cfg-select">
           <option v-for="m in videoModelOptions" :key="m.value" :value="m.value">{{ m.label }}</option>
         </select>
 
-        <label class="cfg-label">Tỷ lệ khung</label>
+        <label class="cfg-label">{{ t('gen.aspectRatio') }}</label>
         <select v-model="aspectRatio" class="cfg-select">
           <option v-for="r in VIDEO_RATIO_OPTIONS" :key="r.value" :value="r.value">{{ r.label }}</option>
         </select>

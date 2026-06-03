@@ -136,26 +136,99 @@ function runCommandCapture(command, args) {
     });
 }
 
-async function pickSaveVideoPath(defaultName = '') {
+function escapeAppleScriptString(str) {
+    return String(str || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
+function normalizeSaveVideoPath(filePath) {
+    const trimmed = String(filePath || '').trim();
+    if (!trimmed) return '';
+    return /\.mp4$/i.test(trimmed) ? trimmed : `${trimmed}.mp4`;
+}
+
+async function pickSaveVideoPathWindows(defaultName) {
     const safeDefaultName = String(defaultName || `render-${Date.now()}.mp4`).replace(/"/g, '');
+    const psScript = [
+        'Add-Type -AssemblyName System.Windows.Forms',
+        '$dialog = New-Object System.Windows.Forms.SaveFileDialog',
+        '$dialog.Title = "Select output video path"',
+        '$dialog.Filter = "MP4 Video (*.mp4)|*.mp4|All Files (*.*)|*.*"',
+        '$dialog.FileName = "' + safeDefaultName + '"',
+        '$result = $dialog.ShowDialog()',
+        'if ($result -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $dialog.FileName }',
+    ].join('; ');
+    const r = await runCommandCapture('powershell', ['-NoProfile', '-STA', '-Command', psScript]);
+    if (!r.success) return { success: false, message: r.stderr || r.message || 'Cannot open save dialog' };
+    if (!r.stdout) return { success: false, canceled: true };
+    return { success: true, filePath: normalizeSaveVideoPath(r.stdout) };
+}
+
+async function pickSaveVideoPathDarwin(defaultName) {
+    const safeDefaultName = escapeAppleScriptString(defaultName || `render-${Date.now()}.mp4`);
+    const script = [
+        'try',
+        `  set savePath to choose file name with prompt "Select output video path" default name "${safeDefaultName}"`,
+        '  return POSIX path of savePath',
+        'on error errMsg number errNum',
+        '  if errNum is -128 then return ""',
+        '  error errMsg number errNum',
+        'end try',
+    ].join('\n');
+    const r = await runCommandCapture('osascript', ['-e', script]);
+    if (!r.success) {
+        return { success: false, message: r.stderr || r.message || 'Cannot open save dialog on macOS' };
+    }
+    if (!r.stdout) return { success: false, canceled: true };
+    return { success: true, filePath: normalizeSaveVideoPath(r.stdout) };
+}
+
+async function pickSaveVideoPathLinux(defaultName) {
+    const safeDefaultName = String(defaultName || `render-${Date.now()}.mp4`);
+    const zenity = await runCommandCapture('zenity', [
+        '--file-selection',
+        '--save',
+        '--confirm-overwrite',
+        '--title=Select output video path',
+        `--filename=${safeDefaultName}`,
+        '--file-filter=MP4 video | *.mp4',
+        '--file-filter=All files | *',
+    ]);
+    if (zenity.success && zenity.stdout) {
+        return { success: true, filePath: normalizeSaveVideoPath(zenity.stdout) };
+    }
+    if (zenity.code === 1) return { success: false, canceled: true };
+
+    const kdialog = await runCommandCapture('kdialog', [
+        '--getsavefilename',
+        safeDefaultName,
+        'MP4 (*.mp4)|*.mp4',
+    ]);
+    if (kdialog.success && kdialog.stdout) {
+        return { success: true, filePath: normalizeSaveVideoPath(kdialog.stdout) };
+    }
+    if (kdialog.code === 1) return { success: false, canceled: true };
+
+    const hint = zenity.message || kdialog.message || zenity.stderr || kdialog.stderr;
+    return {
+        success: false,
+        message: hint || 'Install zenity or kdialog to choose a save path on Linux.',
+    };
+}
+
+async function pickSaveVideoPath(defaultName = '') {
+    const name = String(defaultName || `render-${Date.now()}.mp4`);
 
     if (process.platform === 'win32') {
-        const psScript = [
-            'Add-Type -AssemblyName System.Windows.Forms',
-            '$dialog = New-Object System.Windows.Forms.SaveFileDialog',
-            '$dialog.Title = "Select output video path"',
-            '$dialog.Filter = "MP4 Video (*.mp4)|*.mp4|All Files (*.*)|*.*"',
-            '$dialog.FileName = "' + safeDefaultName + '"',
-            '$result = $dialog.ShowDialog()',
-            'if ($result -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $dialog.FileName }',
-        ].join('; ');
-        const r = await runCommandCapture('powershell', ['-NoProfile', '-STA', '-Command', psScript]);
-        if (!r.success) return { success: false, message: r.stderr || 'Cannot open save dialog' };
-        if (!r.stdout) return { success: false, canceled: true };
-        return { success: true, filePath: r.stdout };
+        return pickSaveVideoPathWindows(name);
+    }
+    if (process.platform === 'darwin') {
+        return pickSaveVideoPathDarwin(name);
+    }
+    if (process.platform === 'linux') {
+        return pickSaveVideoPathLinux(name);
     }
 
-    return { success: false, message: 'Save file dialog is only implemented on Windows in this build.' };
+    return { success: false, message: `Save file dialog is not supported on ${process.platform}.` };
 }
 
 function registerRuntimeRoutes() {

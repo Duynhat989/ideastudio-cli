@@ -1,6 +1,9 @@
 <script setup>
 import { Settings, X, Eraser, Trash2 } from 'lucide-vue-next';
+import { useI18n } from 'vue-i18n';
 import { IMAGE_MODELS } from '@/services/flowApiV3.js';
+
+const { t } = useI18n();
 
 const open = defineModel('open', { type: Boolean, default: false });
 const defaults = defineModel('defaults', { type: Object, required: true });
@@ -36,29 +39,29 @@ const onClearFlow = () => {
         <header class="fw-settings-header">
           <div class="fw-settings-title-wrap">
             <Settings :size="18" class="fw-settings-title-icon" />
-            <h2 id="fw-settings-title">Cài đặt workflow</h2>
+            <h2 id="fw-settings-title">{{ t('flow.workflowSettings') }}</h2>
           </div>
-          <button type="button" class="fw-settings-close" aria-label="Đóng" @click="close">
+          <button type="button" class="fw-settings-close" :aria-label="t('common.close')" @click="close">
             <X :size="18" />
           </button>
         </header>
 
         <div class="fw-settings-body">
           <section class="fw-settings-section">
-            <h3>Model mặc định (node mới)</h3>
+            <h3>{{ t('flow.defaultModels') }}</h3>
             <p class="fw-settings-note">
-              Tier video theo tài khoản Veo trong Setup. Đổi model trên từng node không ảnh hưởng mặc định chung.
+              {{ t('flow.defaultModelsNote') }}
             </p>
 
             <label class="fw-settings-field" for="fw-default-image-model">
-              <span>Model ảnh</span>
+              <span>{{ t('flow.imageModel') }}</span>
               <select id="fw-default-image-model" v-model="defaults.imageModel" class="fw-settings-select">
                 <option v-for="m in IMAGE_MODELS" :key="m.value" :value="m.value">{{ m.label }}</option>
               </select>
             </label>
 
             <label class="fw-settings-field" for="fw-default-video-model">
-              <span>Model video</span>
+              <span>{{ t('flow.videoModel') }}</span>
               <select id="fw-default-video-model" v-model="defaults.videoModel" class="fw-settings-select">
                 <option v-for="m in videoModelOptions" :key="m.value" :value="m.value">{{ m.label }}</option>
               </select>
@@ -66,22 +69,22 @@ const onClearFlow = () => {
           </section>
 
           <section class="fw-settings-section fw-settings-section--danger">
-            <h3>Thao tác flow</h3>
+            <h3>{{ t('flow.flowActions') }}</h3>
             <div class="fw-settings-actions">
               <button type="button" class="fw-settings-btn" @click="onClearResults">
                 <Eraser :size="16" />
-                Clear Results
+                {{ t('flow.clearResults') }}
               </button>
               <button type="button" class="fw-settings-btn fw-settings-btn--danger" @click="onClearFlow">
                 <Trash2 :size="16" />
-                Clear Flow
+                {{ t('flow.clearFlow') }}
               </button>
             </div>
           </section>
         </div>
 
         <footer class="fw-settings-footer">
-          <button type="button" class="fw-settings-btn fw-settings-btn--primary" @click="close">Đóng</button>
+          <button type="button" class="fw-settings-btn fw-settings-btn--primary" @click="close">{{ t('common.close') }}</button>
         </footer>
       </div>
     </div>
@@ -118,81 +121,78 @@ const onClearFlow = () => {
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  padding: 1rem 1.15rem;
-  border-bottom: 1px solid #18181b;
-  background: #0c0c0e;
+  padding: 1rem 1.1rem;
+  border-bottom: 1px solid #27272a;
 }
 
 .fw-settings-title-wrap {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  min-width: 0;
 }
 
 .fw-settings-title-wrap h2 {
   margin: 0;
   font-size: 0.95rem;
   font-weight: 700;
-  color: #f4f4f5;
+  color: #fafafa;
 }
 
 .fw-settings-title-icon {
   color: #eab308;
-  flex-shrink: 0;
 }
 
 .fw-settings-close {
-  width: 2rem;
-  height: 2rem;
-  border: 1px solid #3f3f46;
-  border-radius: 0.5rem;
-  background: #18181b;
-  color: #a1a1aa;
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border: none;
+  border-radius: 0.5rem;
+  background: transparent;
+  color: #a1a1aa;
   cursor: pointer;
 }
 
 .fw-settings-close:hover {
-  color: #e4e4e7;
-  border-color: #52525b;
+  background: #27272a;
+  color: #fafafa;
 }
 
 .fw-settings-body {
-  padding: 1rem 1.15rem 0.5rem;
+  padding: 1rem 1.1rem;
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  max-height: 70vh;
+  overflow-y: auto;
 }
 
 .fw-settings-section h3 {
   margin: 0 0 0.35rem;
-  font-size: 0.72rem;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #a1a1aa;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #e4e4e7;
 }
 
 .fw-settings-note {
-  margin: 0 0 0.75rem;
-  font-size: 0.68rem;
-  line-height: 1.4;
+  margin: 0 0 0.65rem;
+  font-size: 0.72rem;
+  line-height: 1.45;
   color: #71717a;
 }
 
 .fw-settings-field {
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
+  gap: 0.35rem;
   margin-bottom: 0.65rem;
 }
 
-.fw-settings-field > span {
-  font-size: 0.72rem;
-  color: #d4d4d8;
+.fw-settings-field span {
+  font-size: 0.75rem;
+  color: #a1a1aa;
 }
 
 .fw-settings-select {
@@ -200,14 +200,14 @@ const onClearFlow = () => {
   border: 1px solid #3f3f46;
   border-radius: 0.5rem;
   padding: 0.45rem 0.55rem;
-  font-size: 0.78rem;
-  color: #e4e4e7;
   background: #18181b;
+  color: #f4f4f5;
+  font-size: 0.8rem;
 }
 
 .fw-settings-section--danger {
-  padding-top: 0.25rem;
-  border-top: 1px solid #1f1f23;
+  border-top: 1px solid #27272a;
+  padding-top: 0.85rem;
 }
 
 .fw-settings-actions {
@@ -222,9 +222,9 @@ const onClearFlow = () => {
   justify-content: center;
   gap: 0.4rem;
   width: 100%;
-  padding: 0.5rem 0.75rem;
-  border-radius: 0.55rem;
   border: 1px solid #3f3f46;
+  border-radius: 0.55rem;
+  padding: 0.5rem 0.65rem;
   background: #18181b;
   color: #e4e4e7;
   font-size: 0.78rem;
@@ -232,33 +232,19 @@ const onClearFlow = () => {
   cursor: pointer;
 }
 
-.fw-settings-btn:hover {
-  border-color: #52525b;
-  background: #1f1f23;
-}
-
 .fw-settings-btn--danger {
-  color: #fca5a5;
-  border-color: rgba(248, 113, 113, 0.35);
-}
-
-.fw-settings-btn--danger:hover {
-  background: rgba(127, 29, 29, 0.25);
-  border-color: rgba(248, 113, 113, 0.55);
-}
-
-.fw-settings-footer {
-  padding: 0.75rem 1.15rem 1rem;
-  border-top: 1px solid #18181b;
+  border-color: rgba(248, 113, 113, 0.45);
+  color: #fecaca;
 }
 
 .fw-settings-btn--primary {
   border-color: rgba(234, 179, 8, 0.45);
   background: rgba(234, 179, 8, 0.12);
-  color: #fde047;
+  color: #fafafa;
 }
 
-.fw-settings-btn--primary:hover {
-  background: rgba(234, 179, 8, 0.2);
+.fw-settings-footer {
+  padding: 0.85rem 1.1rem 1rem;
+  border-top: 1px solid #27272a;
 }
 </style>
