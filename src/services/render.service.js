@@ -5,6 +5,14 @@ const crypto = require('crypto');
 const { projectPath } = require('../../config');
 const ffmpegStatic = require('ffmpeg-static');
 const ffprobeStatic = require('ffprobe-static');
+const {
+    FRAME_DUR,
+    OUTPUT_FPS,
+    buildFadeFilters,
+    mapXfadeTransition,
+    normalizeEffectType,
+    resolveTransitionDuration
+} = require('../shared/renderEffects');
 
 const RENDER_DIR = path.join(projectPath, 'metadata', 'renders');
 if (!fs.existsSync(RENDER_DIR)) {
@@ -108,6 +116,146 @@ class RenderService {
         return { ow, oh };
     }
 
+    /** Snap timeline times to output frame grid (30fps) — tránh lệch metadata vs số frame decode. */
+    snapFrameTime(seconds) {
+        const n = Math.round(Number(seconds) * OUTPUT_FPS);
+        return Math.max(0, n / OUTPUT_FPS);
+    }
+
+    /** Giống preview RenderView: clip active trên [t0, t1). */
+    overlayEnableExpr(t0, t1) {
+        return `enable='gte(t\\,${t0})*lt(t\\,${t1})'`;
+    }
+
+    sameVisualLayout(a, b) {
+        return Number(a.layoutXPercent) === Number(b.layoutXPercent)
+            && Number(a.layoutYPercent) === Number(b.layoutYPercent)
+            && Number(a.layoutWidthPercent) === Number(b.layoutWidthPercent)
+            && Number(a.layoutHeightPercent) === Number(b.layoutHeightPercent);
+    }
+
+    /** Ghép start clip sau = end clip trước khi sát nhau trên cùng lane. */
+    normalizeAdjacentTimeline(visuals) {
+        const byTrack = new Map();
+        visuals.forEach((clip) => {
+            const key = clip.trackVisualIndex;
+            if (!byTrack.has(key)) byTrack.set(key, []);
+            byTrack.get(key).push(clip);
+        });
+        byTrack.forEach((clips) => {
+            clips.sort((a, b) => a.timelineStart - b.timelineStart);
+            for (let i = 1; i < clips.length; i += 1) {
+                const prevEnd = clips[i - 1].timelineStart + clips[i - 1].clipDuration;
+                const gap = clips[i].timelineStart - prevEnd;
+                if (Math.abs(gap) < FRAME_DUR * 2) {
+                    clips[i].timelineStart = prevEnd;
+                }
+            }
+        });
+    }
+
+    canMergeIntoChain(prev, cur) {
+        const prevEnd = prev.timelineStart + prev.clipDuration;
+        if (Math.abs(cur.timelineStart - prevEnd) > FRAME_DUR / 2) return false;
+        if (!this.sameVisualLayout(prev, cur)) return false;
+        return prev.isVideo && cur.isVideo;
+    }
+
+    buildVisualUnits(visuals) {
+        this.normalizeAdjacentTimeline(visuals);
+        const byTrack = new Map();
+        visuals.forEach((clip) => {
+            const key = clip.trackVisualIndex;
+            if (!byTrack.has(key)) byTrack.set(key, []);
+            byTrack.get(key).push(clip);
+        });
+
+        const units = [];
+        byTrack.forEach((clips) => {
+            clips.sort((a, b) => a.timelineStart - b.timelineStart);
+            let chain = [clips[0]];
+            for (let i = 1; i < clips.length; i += 1) {
+                const prev = chain[chain.length - 1];
+                const cur = clips[i];
+                if (this.canMergeIntoChain(prev, cur)) {
+                    chain.push(cur);
+                } else {
+                    units.push(chain.length === 1
+                        ? { type: 'single', clips: chain.slice() }
+                        : { type: 'chain', clips: chain.slice() });
+                    chain = [cur];
+                }
+            }
+            units.push(chain.length === 1
+                ? { type: 'single', clips: chain.slice() }
+                : { type: 'chain', clips: chain.slice() });
+        });
+
+        return units.sort((a, b) => {
+            const ai = a.clips[0].trackVisualIndex;
+            const bi = b.clips[0].trackVisualIndex;
+            if (bi !== ai) return bi - ai;
+            return a.clips[0].timelineStart - b.clips[0].timelineStart;
+        });
+    }
+
+    buildClipSegmentChain(clip, bw, bh, ow, oh, outLabel) {
+        const trim = clip.clipStart > 0
+            ? `trim=start=${clip.clipStart}:duration=${clip.clipDuration},`
+            : `trim=duration=${clip.clipDuration},`;
+        const fades = buildFadeFilters(clip, clip.clipDuration);
+        const fadePart = fades.length ? `,${fades.join(',')}` : '';
+        return `${trim}setpts=PTS-STARTPTS,fps=${OUTPUT_FPS},scale=${ow}:${oh},pad=${bw}:${bh}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1${fadePart}[${outLabel}]`;
+    }
+
+    buildSingleClipStreamChain(clip, bw, bh, ow, oh, t0, outLabel) {
+        const trim = clip.clipStart > 0
+            ? `trim=start=${clip.clipStart}:duration=${clip.clipDuration},`
+            : `trim=duration=${clip.clipDuration},`;
+        const fades = buildFadeFilters(clip, clip.clipDuration);
+        const fadePart = fades.length ? `,${fades.join(',')}` : '';
+        return `${trim}setpts=PTS-STARTPTS,fps=${OUTPUT_FPS},scale=${ow}:${oh},pad=${bw}:${bh}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1${fadePart},setpts=PTS-STARTPTS+${t0}/TB,tpad=stop_mode=clone:stop_duration=${FRAME_DUR}[${outLabel}]`;
+    }
+
+    /** Ghép các segment trong chain: concat hoặc xfade tùy transition giữa clip. */
+    buildChainedVideoStream(clips, unitIdx, filterParts) {
+        if (!clips.length) return { label: '', duration: 0 };
+        if (clips.length === 1) {
+            return { label: `chs${unitIdx}_0`, duration: clips[0].clipDuration };
+        }
+
+        let current = `chs${unitIdx}_0`;
+        let currentDur = Number(clips[0].clipDuration || 0);
+
+        for (let i = 1; i < clips.length; i += 1) {
+            const prev = clips[i - 1];
+            const nextLabel = `chs${unitIdx}_${i}`;
+            const transType = normalizeEffectType(prev.transitionType);
+            const transDur = resolveTransitionDuration(
+                transType,
+                prev.transitionDuration,
+                clips[i - 1].clipDuration,
+                clips[i].clipDuration
+            );
+
+            if (transType !== 'none' && transDur > 0) {
+                const offset = Math.max(0, currentDur - transDur);
+                const outLabel = `xfn${unitIdx}_${i}`;
+                const xfade = mapXfadeTransition(transType);
+                filterParts.push(`[${current}][${nextLabel}]xfade=transition=${xfade}:duration=${transDur}:offset=${offset}[${outLabel}]`);
+                current = outLabel;
+                currentDur = offset + Number(clips[i].clipDuration || 0);
+            } else {
+                const outLabel = `cct${unitIdx}_${i}`;
+                filterParts.push(`[${current}][${nextLabel}]concat=n=2:v=1:a=0[${outLabel}]`);
+                current = outLabel;
+                currentDur += Number(clips[i].clipDuration || 0);
+            }
+        }
+
+        return { label: current, duration: currentDur };
+    }
+
     getRenderTarget(aspectRatio = 'landscape', quality = 'hd') {
         const longSide = quality === '2k' ? 2560 : 1920;
         if (aspectRatio === 'portrait') return { w: Math.round(longSide * 9 / 16), h: longSide };
@@ -194,8 +342,8 @@ class RenderService {
         let timelineDuration = 0;
 
         timeline.forEach((item) => {
-            const clipDuration = Number(item.duration || durationPerImage || 3);
-            const timelineStart = Number(item.timelineStart || 0);
+            const timelineStart = this.snapFrameTime(Number(item.timelineStart || 0));
+            const clipDuration = Math.max(FRAME_DUR, this.snapFrameTime(Number(item.duration || durationPerImage || 3)));
             timelineDuration = Math.max(timelineDuration, timelineStart + clipDuration);
 
             if (item.type === 'text') {
@@ -252,11 +400,17 @@ class RenderService {
                 layoutYPercent: num(item.layoutYPercent, 0),
                 layoutWidthPercent: num(item.layoutWidthPercent, 100),
                 layoutHeightPercent: num(item.layoutHeightPercent, 100),
-                trackVisualIndex: num(item.trackVisualIndex, 0)
+                trackVisualIndex: num(item.trackVisualIndex, 0),
+                fadeInType: normalizeEffectType(item.fadeInType),
+                fadeInDuration: num(item.fadeInDuration, 0.5),
+                fadeOutType: normalizeEffectType(item.fadeOutType),
+                fadeOutDuration: num(item.fadeOutDuration, 0.5),
+                transitionType: normalizeEffectType(item.transitionType),
+                transitionDuration: num(item.transitionDuration, 0.5)
             });
         });
 
-        timelineDuration = Math.max(0.1, timelineDuration);
+        timelineDuration = Math.max(FRAME_DUR, this.snapFrameTime(timelineDuration));
 
         /** Giống preview RenderView: lane index lớn hơn = nền, vẽ trước; lane nhỏ = trên cùng. */
         visuals.sort((a, b) => {
@@ -268,6 +422,8 @@ class RenderService {
             throw new Error('No valid video/image clips in timeline');
         }
 
+        const visualUnits = this.buildVisualUnits(visuals);
+
         const inputArgs = [];
         const filterParts = [];
         let inputIndex = 0;
@@ -278,12 +434,12 @@ class RenderService {
         let currentV = '[0:v]';
         const visualInputIndices = [];
 
-        visuals.forEach((clip, seg) => {
-            const { sourcePath, clipDuration, clipStart, timelineStart, isImage } = clip;
-            const lx = Math.min(100, Math.max(0, clip.layoutXPercent));
-            const ly = Math.min(100, Math.max(0, clip.layoutYPercent));
-            const lwP = Math.min(100, Math.max(1, clip.layoutWidthPercent));
-            const lhP = Math.min(100, Math.max(1, clip.layoutHeightPercent));
+        visualUnits.forEach((unit, unitIdx) => {
+            const lead = unit.clips[0];
+            const lx = Math.min(100, Math.max(0, lead.layoutXPercent));
+            const ly = Math.min(100, Math.max(0, lead.layoutYPercent));
+            const lwP = Math.min(100, Math.max(1, lead.layoutWidthPercent));
+            const lhP = Math.min(100, Math.max(1, lead.layoutHeightPercent));
             let boxW = Math.round(target.w * lwP / 100);
             let boxH = Math.round(target.h * lhP / 100);
             let xPx = Math.round(target.w * lx / 100);
@@ -293,36 +449,56 @@ class RenderService {
             xPx = Math.max(0, Math.min(Math.max(0, target.w - boxW), xPx));
             yPx = Math.max(0, Math.min(Math.max(0, target.h - boxH), yPx));
 
-            /**
-             * FFmpeg 8: scale+pad trong filtergraph dễ làm tròn sai → pad nhỏ hơn input.
-             * Dùng ffprobe lấy iw/ih, tính ow/oh contain trong Node — luôn ow≤bw, oh≤bh — rồi scale=ow:oh + pad cố định.
-             */
             const bw = boxW;
             const bh = boxH;
-            const { iw, ih } = this.probeVisualStreamDims(sourcePath, probeCache);
-            const { ow, oh } = this.containScalePixels(iw, ih, bw, bh);
-            const t0 = timelineStart;
-            const t1 = timelineStart + clipDuration;
-            // Align each clip onto global timeline: local 0..dur -> global t0..t1.
-            const subChain = `setpts=PTS-STARTPTS+${t0}/TB,scale=${ow}:${oh},pad=${bw}:${bh}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1`;
-            const enable = `enable='between(t\\,${t0}\\,${t1})'`;
+            const t0 = lead.timelineStart;
+            const t1 = unit.type === 'chain'
+                ? unit.clips[unit.clips.length - 1].timelineStart + unit.clips[unit.clips.length - 1].clipDuration
+                : lead.timelineStart + lead.clipDuration;
+            const enable = this.overlayEnableExpr(t0, t1);
+            const clipLabel = `cvl${unitIdx}`;
+            const outLabel = `olv${unitIdx}`;
 
-            if (isImage) {
-                inputArgs.push('-loop', '1', '-t', String(clipDuration), '-i', sourcePath);
-            } else if (clipStart > 0) {
-                inputArgs.push('-ss', String(clipStart), '-t', String(clipDuration), '-i', sourcePath);
+            if (unit.type === 'chain') {
+                unit.clips.forEach((clip, segIdx) => {
+                    const { iw, ih } = this.probeVisualStreamDims(clip.sourcePath, probeCache);
+                    const { ow, oh } = this.containScalePixels(iw, ih, bw, bh);
+                    inputArgs.push('-i', clip.sourcePath);
+                    const inIdx = inputIndex;
+                    inputIndex += 1;
+                    clip.inputIndex = inIdx;
+                    visualInputIndices.push({ clip, inIdx });
+                    const segLabel = `chs${unitIdx}_${segIdx}`;
+                    filterParts.push(`[${inIdx}:v]${this.buildClipSegmentChain(clip, bw, bh, ow, oh, segLabel)}`);
+                });
+                const { label: chainLabel } = this.buildChainedVideoStream(unit.clips, unitIdx, filterParts);
+                filterParts.push(`[${chainLabel}]setpts=PTS-STARTPTS+${t0}/TB[${clipLabel}]`);
             } else {
-                inputArgs.push('-t', String(clipDuration), '-i', sourcePath);
-            }
-            const inIdx = inputIndex;
-            inputIndex += 1;
-            visualInputIndices.push(inIdx);
+                const clip = lead;
+                const { iw, ih } = this.probeVisualStreamDims(clip.sourcePath, probeCache);
+                const { ow, oh } = this.containScalePixels(iw, ih, bw, bh);
 
-            const clipLabel = `cvl${seg}`;
-            const outLabel = `olv${seg}`;
-            filterParts.push(`[${inIdx}:v]${subChain}[${clipLabel}]`);
-            // Prevent holding the last frame of an ended clip over next segments.
-            filterParts.push(`${currentV}[${clipLabel}]overlay=${xPx}:${yPx}:eof_action=pass:repeatlast=0:shortest=0:${enable}[${outLabel}]`);
+                if (clip.isImage) {
+                    inputArgs.push('-loop', '1', '-t', String(clip.clipDuration), '-i', clip.sourcePath);
+                    const inIdx = inputIndex;
+                    inputIndex += 1;
+                    clip.inputIndex = inIdx;
+                    visualInputIndices.push({ clip, inIdx });
+                    const fades = buildFadeFilters(clip, clip.clipDuration);
+                    const fadePart = fades.length ? `,${fades.join(',')}` : '';
+                    const subChain = `setpts=PTS-STARTPTS+${t0}/TB,fps=${OUTPUT_FPS},scale=${ow}:${oh},pad=${bw}:${bh}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1${fadePart}`;
+                    filterParts.push(`[${inIdx}:v]${subChain}[${clipLabel}]`);
+                } else {
+                    inputArgs.push('-i', clip.sourcePath);
+                    const inIdx = inputIndex;
+                    inputIndex += 1;
+                    clip.inputIndex = inIdx;
+                    visualInputIndices.push({ clip, inIdx });
+                    filterParts.push(`[${inIdx}:v]${this.buildSingleClipStreamChain(clip, bw, bh, ow, oh, t0, clipLabel)}`);
+                }
+            }
+
+            filterParts.push(`${currentV}[${clipLabel}]overlay=${xPx}:${yPx}:eof_action=pass:repeatlast=1:shortest=0:${enable}[${outLabel}]`);
             currentV = `[${outLabel}]`;
         });
 
@@ -352,7 +528,7 @@ class RenderService {
                 } else {
                     drawParams += ':box=0';
                 }
-                filterComplex += `;${inputLabel}drawtext=${drawParams}:enable='between(t,${overlay.start},${overlay.end})'${outputLabel}`;
+                filterComplex += `;${inputLabel}drawtext=${drawParams}:${this.overlayEnableExpr(overlay.start, overlay.end)}${outputLabel}`;
                 videoOutputLabel = outputLabel;
             });
         }
@@ -362,9 +538,8 @@ class RenderService {
         const audioBranchLabels = [];
         let audSeg = 0;
 
-        visuals.forEach((clip, seg) => {
+        visualInputIndices.forEach(({ clip, inIdx }) => {
             if (!clip.isVideo || clip.muted) return;
-            const inIdx = visualInputIndices[seg];
             const delayMs = Math.round(clip.timelineStart * 1000);
             const br = `aud${audSeg}`;
             audSeg += 1;

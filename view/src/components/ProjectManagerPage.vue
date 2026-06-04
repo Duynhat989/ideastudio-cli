@@ -703,31 +703,63 @@ onMounted(loadProjects);
 /* Grid */
 .pm-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 1.25rem;
+  grid-template-columns: repeat(auto-fill, minmax(268px, 1fr));
+  gap: 1rem;
 }
 
 .pm-card {
   position: relative;
-  border-radius: 1.15rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: #f7f7f8;
+  display: flex;
+  flex-direction: column;
+  border-radius: 0.95rem;
+  border: 1px solid var(--color-border);
+  background:
+    radial-gradient(120% 80% at 0% 0%, rgba(250, 204, 21, 0.07), transparent 55%),
+    linear-gradient(180deg, var(--color-bg-elevated) 0%, color-mix(in srgb, var(--color-bg) 88%, #000) 100%);
   overflow: hidden;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.22);
-  transition: border-color 0.22s ease, box-shadow 0.22s ease, transform 0.22s ease;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 10px 28px rgba(0, 0, 0, 0.28);
+  transition:
+    border-color 0.22s ease,
+    box-shadow 0.22s ease,
+    transform 0.22s ease;
+}
+
+.pm-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  background: linear-gradient(135deg, rgba(250, 204, 21, 0.08), transparent 42%);
+  transition: opacity 0.22s ease;
 }
 
 .pm-card:hover {
-  border-color: rgba(255, 255, 255, 0.16);
-  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.32);
-  transform: translateY(-4px);
+  border-color: color-mix(in srgb, var(--color-accent) 28%, var(--color-border));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 16px 36px rgba(0, 0, 0, 0.38),
+    0 0 0 1px rgba(250, 204, 21, 0.06);
+  transform: translateY(-3px);
+}
+
+.pm-card:hover::before {
+  opacity: 1;
 }
 
 .pm-card--active {
-  border-color: rgba(250, 204, 21, 0.55);
+  border-color: color-mix(in srgb, var(--color-accent) 45%, var(--color-border));
   box-shadow:
-    0 0 0 2px rgba(250, 204, 21, 0.18),
-    0 18px 42px rgba(0, 0, 0, 0.35);
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 0 0 1px rgba(250, 204, 21, 0.14),
+    0 14px 32px rgba(0, 0, 0, 0.34);
+}
+
+.pm-card--active::before {
+  opacity: 1;
 }
 
 .pm-card-open {
@@ -741,13 +773,24 @@ onMounted(loadProjects);
   text-align: left;
   cursor: pointer;
   font-family: inherit;
+  flex: 1;
+  min-height: 0;
 }
 
 .pm-card-media {
   position: relative;
   aspect-ratio: 16 / 9;
   overflow: hidden;
-  background: #ececef;
+  background: var(--color-bg-soft);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 85%, transparent);
+}
+
+.pm-card-media::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(9, 9, 11, 0.05) 0%, rgba(9, 9, 11, 0.55) 100%);
 }
 
 .pm-card-img {
@@ -756,33 +799,38 @@ onMounted(loadProjects);
   height: 100%;
   object-fit: cover;
   object-position: center;
-  transition: transform 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+  opacity: 0.92;
+  transition: transform 0.45s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.25s ease;
 }
 
 .pm-card:hover .pm-card-img {
-  transform: scale(1.04);
+  transform: scale(1.05);
+  opacity: 1;
 }
 
 .pm-card-tag {
   position: absolute;
-  top: 0;
-  left: 0;
+  top: 0.55rem;
+  left: 0.55rem;
   z-index: 1;
-  padding: 0.55rem 0.95rem 0.6rem;
-  border-radius: 0 0 0.85rem 0;
-  background: #fff;
-  color: #6b7280;
-  font-size: 0.78rem;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+  padding: 0.28rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--color-accent) 35%, var(--color-border));
+  background: rgba(9, 9, 11, 0.72);
+  backdrop-filter: blur(8px);
+  color: var(--color-accent);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
 }
 
 .pm-card-content {
   display: flex;
   flex-direction: column;
-  gap: 0.55rem;
-  padding: 0.95rem 1rem 1.05rem;
+  gap: 0.45rem;
+  padding: 0.85rem 0.95rem 0.95rem;
   flex: 1;
 }
 
@@ -790,44 +838,44 @@ onMounted(loadProjects);
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 0.5rem;
+  gap: 0.45rem;
 }
 
 .pm-card-title {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: 0.98rem;
   font-weight: 800;
   letter-spacing: -0.02em;
-  line-height: 1.25;
-  color: #18181b;
+  line-height: 1.3;
+  color: var(--color-text);
 }
 
 .pm-active-badge {
   flex-shrink: 0;
-  font-size: 0.58rem;
+  font-size: 0.56rem;
   font-weight: 800;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
-  padding: 0.22rem 0.48rem;
+  padding: 0.2rem 0.45rem;
   border-radius: 999px;
-  background: rgba(250, 204, 21, 0.18);
-  color: #a16207;
-  border: 1px solid rgba(250, 204, 21, 0.35);
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 35%, transparent);
 }
 
 .pm-card-desc {
   margin: 0;
-  font-size: 0.8125rem;
-  line-height: 1.65;
-  color: #71717a;
+  font-size: 0.78rem;
+  line-height: 1.6;
+  color: var(--color-text-muted);
   display: -webkit-box;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
 
 .pm-card-desc--muted {
-  color: #a1a1aa;
+  color: #71717a;
   font-style: italic;
 }
 
@@ -835,8 +883,10 @@ onMounted(loadProjects);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.65rem;
-  margin-top: 0.15rem;
+  gap: 0.55rem;
+  margin-top: 0.35rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
   flex-wrap: wrap;
 }
 
@@ -844,23 +894,23 @@ onMounted(loadProjects);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 3.25rem;
-  padding: 0.38rem 0.9rem;
+  min-width: 2.75rem;
+  padding: 0.22rem 0.62rem;
   border-radius: 999px;
-  background: #c96452;
-  color: #fff;
-  font-size: 0.8125rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  box-shadow: 0 4px 12px rgba(201, 100, 82, 0.28);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 28%, var(--color-border));
+  background: color-mix(in srgb, var(--color-accent-soft) 65%, var(--color-bg-soft));
+  color: var(--color-accent-strong);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
 }
 
 .pm-card-date {
   display: inline-flex;
   align-items: center;
-  gap: 0.3rem;
-  font-size: 0.68rem;
-  color: #a1a1aa;
+  gap: 0.28rem;
+  font-size: 0.64rem;
+  color: #71717a;
 }
 
 .pm-card-date time {
@@ -869,13 +919,13 @@ onMounted(loadProjects);
 
 .pm-card-actions {
   position: absolute;
-  top: 0.65rem;
-  right: 0.65rem;
+  top: 0.5rem;
+  right: 0.5rem;
   display: flex;
-  gap: 0.3rem;
+  gap: 0.28rem;
   opacity: 0;
   transition: opacity 0.18s ease;
-  z-index: 2;
+  z-index: 3;
 }
 
 .pm-card:hover .pm-card-actions,
@@ -887,28 +937,28 @@ onMounted(loadProjects);
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 1.85rem;
-  height: 1.85rem;
+  width: 1.75rem;
+  height: 1.75rem;
   border-radius: 0.45rem;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(6px);
-  color: #f4f4f5;
+  border: 1px solid color-mix(in srgb, var(--color-border) 80%, white 8%);
+  background: rgba(9, 9, 11, 0.78);
+  backdrop-filter: blur(8px);
+  color: var(--color-text-muted);
   cursor: pointer;
   padding: 0;
   transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
 }
 
 .pm-icon:hover {
-  color: #fff;
-  border-color: rgba(255, 255, 255, 0.2);
-  background: rgba(0, 0, 0, 0.7);
+  color: var(--color-text);
+  border-color: color-mix(in srgb, var(--color-accent) 35%, var(--color-border));
+  background: rgba(19, 21, 26, 0.92);
 }
 
 .pm-icon--danger:hover {
   color: #fecaca;
   border-color: rgba(248, 113, 113, 0.45);
-  background: rgba(248, 113, 113, 0.15);
+  background: rgba(248, 113, 113, 0.12);
 }
 
 .pm-icon--ok {
@@ -917,7 +967,7 @@ onMounted(loadProjects);
 }
 
 .pm-icon--ok:hover {
-  background: rgba(34, 197, 94, 0.15);
+  background: rgba(34, 197, 94, 0.12);
 }
 
 .pm-rename {
@@ -930,11 +980,17 @@ onMounted(loadProjects);
   width: 100%;
   box-sizing: border-box;
   border-radius: 0.5rem;
-  border: 1px solid rgba(250, 204, 21, 0.5);
-  background: #fff;
-  color: #18181b;
-  padding: 0.5rem 0.65rem;
-  font-size: 0.875rem;
+  border: 1px solid color-mix(in srgb, var(--color-accent) 40%, var(--color-border));
+  background: var(--color-bg-soft);
+  color: var(--color-text);
+  padding: 0.48rem 0.62rem;
+  font-size: 0.84rem;
+  outline: none;
+}
+
+.pm-rename-input:focus {
+  border-color: color-mix(in srgb, var(--color-accent) 55%, var(--color-border));
+  box-shadow: 0 0 0 3px rgba(250, 204, 21, 0.1);
 }
 
 .pm-rename-row {

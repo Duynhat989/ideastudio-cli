@@ -2316,12 +2316,12 @@ watch(() => props.openProjectManagerKey, () => {
     display: flex;
     flex-direction: column;
     align-items: stretch;
-    gap: 0.4rem;
+    gap: 0.2rem;
     z-index: 1000;
     transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
-    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
-    padding: 0.7rem 0.9rem 0.9rem;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.28);
+    padding: 0.4rem 0.75rem 0.45rem;
 }
 
 .sidebar-toolbar {
@@ -2330,7 +2330,7 @@ watch(() => props.openProjectManagerKey, () => {
     align-items: center;
     justify-content: space-between;
     width: 100%;
-    gap: 0.7rem;
+    gap: 0.45rem;
     flex-wrap: wrap;
 }
 
@@ -2353,11 +2353,11 @@ watch(() => props.openProjectManagerKey, () => {
 /* Floating edit history (teleported to body, right rail 300px) */
 .sidebar-history-panel {
     position: fixed;
-    top: 4.85rem;
+    top: 4.15rem;
     right: 0;
     width: 300px;
     max-width: 100vw;
-    max-height: calc(100vh - 4.85rem);
+    max-height: calc(100vh - 4.15rem);
     z-index: 2500;
     display: flex;
     flex-direction: column;
@@ -2488,8 +2488,15 @@ watch(() => props.openProjectManagerKey, () => {
 .sidebar-header {
     display: flex;
     align-items: center;
-    gap: 0.7rem;
+    gap: 0.5rem;
     min-width: 0;
+}
+
+.sidebar-header .btn {
+    padding: 0.34rem 0.58rem;
+    font-size: 0.74rem;
+    border-radius: 0.5rem;
+    gap: 0.35rem;
 }
 
 .sidebar-title-wrap {
@@ -2502,7 +2509,7 @@ watch(() => props.openProjectManagerKey, () => {
 
 .sidebar-title {
     margin: 0;
-    font-size: 0.78rem;
+    font-size: 0.72rem;
     font-weight: 800;
     letter-spacing: 0.06em;
     text-transform: uppercase;
@@ -2528,32 +2535,29 @@ watch(() => props.openProjectManagerKey, () => {
 .action-buttons {
     display: flex;
     align-items: flex-end;
-    gap: 0.85rem;
+    gap: 0.55rem;
     flex-wrap: wrap;
     width: 100%;
-    padding: 0.55rem 0.65rem;
-    border: 1px solid var(--color-border);
-    border-radius: 12px;
-    background:
-        linear-gradient(180deg, var(--color-bg-elevated) 0%, color-mix(in srgb, var(--color-bg) 92%, transparent) 100%);
-    box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.04),
-        0 4px 18px rgba(0, 0, 0, 0.16);
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
 }
 
 .action-group {
     display: flex;
     flex-direction: column;
-    gap: 0.35rem;
+    gap: 0.18rem;
     min-width: 0;
 }
 
 .action-group-label {
     margin: 0;
-    padding: 0 0.15rem;
-    font-size: 0.58rem;
+    padding: 0;
+    font-size: 0.54rem;
     font-weight: 700;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--color-text-muted);
     line-height: 1;
@@ -2563,17 +2567,17 @@ watch(() => props.openProjectManagerKey, () => {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 3px;
-    padding: 3px;
-    border-radius: 10px;
-    border: 1px solid var(--color-border);
-    background: var(--color-bg);
+    gap: 2px;
+    padding: 0;
+    border-radius: 0;
+    border: none;
+    background: transparent;
 }
 
 .action-group-sep {
     align-self: stretch;
     width: 1px;
-    margin: 0.15rem 0 0.1rem;
+    margin: 0.05rem 0;
     background: linear-gradient(
         180deg,
         transparent 0%,
@@ -2586,14 +2590,14 @@ watch(() => props.openProjectManagerKey, () => {
 .action-chip {
     display: inline-flex;
     align-items: center;
-    gap: 0.42rem;
-    height: 30px;
-    padding: 0 0.62rem 0 0.38rem;
+    gap: 0.32rem;
+    height: 26px;
+    padding: 0 0.48rem 0 0.28rem;
     border: 1px solid transparent;
-    border-radius: 7px;
+    border-radius: 6px;
     background: transparent;
     color: var(--color-text-muted);
-    font-size: 0.74rem;
+    font-size: 0.7rem;
     font-weight: 600;
     letter-spacing: -0.01em;
     cursor: pointer;
@@ -2620,9 +2624,9 @@ watch(() => props.openProjectManagerKey, () => {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 22px;
-    height: 22px;
-    border-radius: 6px;
+    width: 18px;
+    height: 18px;
+    border-radius: 5px;
     background: var(--color-bg-soft);
     color: inherit;
     flex-shrink: 0;

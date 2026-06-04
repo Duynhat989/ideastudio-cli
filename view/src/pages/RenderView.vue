@@ -26,6 +26,12 @@ import {
 import { projectService } from '@/services/project.service';
 import { notify } from '@/composables/useNotify.js';
 import { runtime } from '@/services/runtime';
+import {
+  FADE_EFFECT_TYPES,
+  TRANSITION_EFFECT_TYPES,
+  computePreviewOpacity,
+  ensureClipEffects
+} from '@/constants/renderEffects.js';
 
 const props = defineProps({
   sourceAssets: { type: Array, default: () => [] },
@@ -57,6 +63,61 @@ const TEXT_FONT_WEIGHT_OPTIONS = [
   { value: 800, label: '800 — Rất đậm' },
   { value: 900, label: '900 — Tối đa' }
 ];
+
+const ensureClipEffectFields = (clip) => {
+  if (!clip || (clip.type !== 'video' && clip.type !== 'image')) return;
+  ensureClipEffects(clip);
+};
+
+const clipHasEffects = (clip) => {
+  ensureClipEffectFields(clip);
+  return clip.fadeInType !== 'none' || clip.fadeOutType !== 'none' || clip.transitionType !== 'none';
+};
+
+const canApplyVisualEffect = computed(() => {
+  const c = selectedClip.value;
+  return !!c && (c.type === 'video' || c.type === 'image') && selectedClipCount.value <= 1;
+});
+
+const applyTransitionEffect = (effectId) => {
+  const clip = selectedClip.value;
+  if (!canApplyVisualEffect.value) return;
+  ensureClipEffectFields(clip);
+  clip.transitionType = effectId;
+  const preset = TRANSITION_EFFECT_TYPES.find((e) => e.id === effectId);
+  if (preset?.defaultDuration > 0) clip.transitionDuration = preset.defaultDuration;
+  scheduleTimelineSave();
+};
+
+const applyFadeInEffect = (effectId) => {
+  const clip = selectedClip.value;
+  if (!canApplyVisualEffect.value) return;
+  ensureClipEffectFields(clip);
+  clip.fadeInType = effectId;
+  const preset = FADE_EFFECT_TYPES.find((e) => e.id === effectId);
+  if (preset?.defaultDuration > 0) clip.fadeInDuration = preset.defaultDuration;
+  scheduleTimelineSave();
+};
+
+const applyFadeOutEffect = (effectId) => {
+  const clip = selectedClip.value;
+  if (!canApplyVisualEffect.value) return;
+  ensureClipEffectFields(clip);
+  clip.fadeOutType = effectId;
+  const preset = FADE_EFFECT_TYPES.find((e) => e.id === effectId);
+  if (preset?.defaultDuration > 0) clip.fadeOutDuration = preset.defaultDuration;
+  scheduleTimelineSave();
+};
+
+const clearAllClipEffects = () => {
+  const clip = selectedClip.value;
+  if (!canApplyVisualEffect.value) return;
+  ensureClipEffectFields(clip);
+  clip.fadeInType = 'none';
+  clip.fadeOutType = 'none';
+  clip.transitionType = 'none';
+  scheduleTimelineSave();
+};
 
 const hexForColorInput = (c) => {
   const s = String(c || '#ffffff').trim();
@@ -216,6 +277,7 @@ const selectTimelineClip = (clip, trackId, e) => {
   if (!clip) return;
   selectedTrackId.value = trackId;
   if (clip.type === 'video' || clip.type === 'image') ensureVisualMediaLayoutFields(clip);
+  if (clip.type === 'video' || clip.type === 'image') ensureClipEffectFields(clip);
 
   const additive = e?.metaKey || e?.ctrlKey;
   const range = e?.shiftKey;
@@ -1226,6 +1288,14 @@ const getVisualMediaLayoutStyle = (clip) => {
   };
 };
 
+const getVisualPreviewStyle = (clip) => {
+  const layout = getVisualMediaLayoutStyle(clip);
+  ensureClipEffectFields(clip);
+  const rel = playhead.value - Number(clip.startTime || 0);
+  const opacity = computePreviewOpacity(clip, rel, clip.duration);
+  return { ...layout, opacity: String(opacity) };
+};
+
 const resolveMediaUrl = (u) => {
   try {
     return new URL(u, window.location.href).href;
@@ -1582,6 +1652,7 @@ const openInspectorForClip = (clip, trackId) => {
   setSingleClipSelection(clip, trackId);
   ensureTextClipFields(clip);
   ensureVisualMediaLayoutFields(clip);
+  ensureClipEffectFields(clip);
   inspectorOpen.value = true;
 };
 
@@ -1612,6 +1683,10 @@ const onInspectorChange = () => {
     const h = Number(clip.layoutHeightPercent);
     clip.layoutXPercent = Math.max(0, Math.min(100 - w, Number(clip.layoutXPercent)));
     clip.layoutYPercent = Math.max(0, Math.min(100 - h, Number(clip.layoutYPercent)));
+    ensureClipEffectFields(clip);
+    clip.fadeInDuration = Math.max(0.1, Math.min(5, Number(clip.fadeInDuration || 0.5)));
+    clip.fadeOutDuration = Math.max(0.1, Math.min(5, Number(clip.fadeOutDuration || 0.5)));
+    clip.transitionDuration = Math.max(0.1, Math.min(5, Number(clip.transitionDuration || 0.5)));
   }
   clip.startTime = normalizeClipStart(track, clip, clip.startTime);
   void syncPreviewToPlayhead();
@@ -1660,6 +1735,13 @@ const renderTimelinePayload = computed(() => {
     base.layoutYPercent = Number(clip.layoutYPercent);
     base.layoutWidthPercent = Number(clip.layoutWidthPercent);
     base.layoutHeightPercent = Number(clip.layoutHeightPercent);
+    ensureClipEffectFields(clip);
+    base.fadeInType = clip.fadeInType;
+    base.fadeInDuration = Number(clip.fadeInDuration || 0.5);
+    base.fadeOutType = clip.fadeOutType;
+    base.fadeOutDuration = Number(clip.fadeOutDuration || 0.5);
+    base.transitionType = clip.transitionType;
+    base.transitionDuration = Number(clip.transitionDuration || 0.5);
   }
   return base;
     }))
@@ -1722,7 +1804,10 @@ const applyLoadedTimeline = async (data) => {
     for (const t of tracks.value) {
       for (const c of t.clips) {
         if (c.type === 'text') ensureTextClipFields(c);
-        if (c.type === 'video' || c.type === 'image') ensureVisualMediaLayoutFields(c);
+        if (c.type === 'video' || c.type === 'image') {
+          ensureVisualMediaLayoutFields(c);
+          ensureClipEffectFields(c);
+        }
       }
     }
   } finally {
@@ -2133,11 +2218,110 @@ onBeforeUnmount(() => {
             </div>
           </template>
 
-          <template v-else>
-            <div class="resource-tab-pane resource-tab-pane--empty">
-              <WandSparkles :size="22" class="resource-tab-empty-icon" />
-              <p class="resource-tab-empty-title">Effect</p>
-              <p class="resource-tab-empty-sub">Hiệu ứng sẽ được bổ sung trong bản cập nhật sau.</p>
+          <template v-else-if="resourcePanelTab === 'effect'">
+            <div class="resource-tab-pane effect-tab">
+              <p v-if="!canApplyVisualEffect" class="effect-tab-hint">
+                Chọn <strong>một</strong> clip video hoặc ảnh trên timeline để gán hiệu ứng.
+              </p>
+              <p v-else class="effect-tab-hint effect-tab-hint--ok">
+                Đang chỉnh: {{ getResourceThumbName(selectedClip.source || selectedClip.type) }}
+              </p>
+
+              <section class="effect-group">
+                <h4 class="effect-group-title">Hiệu ứng chuyển cảnh</h4>
+                <p class="effect-group-sub">Cuối clip này → đầu clip kế tiếp (cùng lane, sát nhau)</p>
+                <div class="effect-grid">
+                  <button
+                    v-for="fx in TRANSITION_EFFECT_TYPES"
+                    :key="'tr-' + fx.id"
+                    type="button"
+                    class="effect-card"
+                    :class="{ active: canApplyVisualEffect && selectedClip.transitionType === fx.id }"
+                    :disabled="!canApplyVisualEffect"
+                    @click="applyTransitionEffect(fx.id)"
+                  >
+                    <span class="effect-card-label">{{ fx.label }}</span>
+                  </button>
+                </div>
+                <label v-if="canApplyVisualEffect && selectedClip.transitionType !== 'none'" class="effect-duration-row">
+                  <span>Thời lượng (s)</span>
+                  <input
+                    type="number"
+                    min="0.1"
+                    max="5"
+                    step="0.1"
+                    v-model.number="selectedClip.transitionDuration"
+                    @change="onInspectorChange"
+                  />
+                </label>
+              </section>
+
+              <section class="effect-group">
+                <h4 class="effect-group-title">Hiệu ứng hiện dần</h4>
+                <p class="effect-group-sub">Fade in — đầu clip</p>
+                <div class="effect-grid">
+                  <button
+                    v-for="fx in FADE_EFFECT_TYPES"
+                    :key="'fi-' + fx.id"
+                    type="button"
+                    class="effect-card"
+                    :class="{ active: canApplyVisualEffect && selectedClip.fadeInType === fx.id }"
+                    :disabled="!canApplyVisualEffect"
+                    @click="applyFadeInEffect(fx.id)"
+                  >
+                    <span class="effect-card-label">{{ fx.label }}</span>
+                  </button>
+                </div>
+                <label v-if="canApplyVisualEffect && selectedClip.fadeInType !== 'none'" class="effect-duration-row">
+                  <span>Thời lượng (s)</span>
+                  <input
+                    type="number"
+                    min="0.1"
+                    max="5"
+                    step="0.1"
+                    v-model.number="selectedClip.fadeInDuration"
+                    @change="onInspectorChange"
+                  />
+                </label>
+              </section>
+
+              <section class="effect-group">
+                <h4 class="effect-group-title">Hiệu ứng mờ dần</h4>
+                <p class="effect-group-sub">Fade out — cuối clip</p>
+                <div class="effect-grid">
+                  <button
+                    v-for="fx in FADE_EFFECT_TYPES"
+                    :key="'fo-' + fx.id"
+                    type="button"
+                    class="effect-card"
+                    :class="{ active: canApplyVisualEffect && selectedClip.fadeOutType === fx.id }"
+                    :disabled="!canApplyVisualEffect"
+                    @click="applyFadeOutEffect(fx.id)"
+                  >
+                    <span class="effect-card-label">{{ fx.label }}</span>
+                  </button>
+                </div>
+                <label v-if="canApplyVisualEffect && selectedClip.fadeOutType !== 'none'" class="effect-duration-row">
+                  <span>Thời lượng (s)</span>
+                  <input
+                    type="number"
+                    min="0.1"
+                    max="5"
+                    step="0.1"
+                    v-model.number="selectedClip.fadeOutDuration"
+                    @change="onInspectorChange"
+                  />
+                </label>
+              </section>
+
+              <button
+                type="button"
+                class="effect-clear-btn"
+                :disabled="!canApplyVisualEffect || !clipHasEffects(selectedClip)"
+                @click="clearAllClipEffects"
+              >
+                Xóa tất cả hiệu ứng clip
+              </button>
             </div>
           </template>
         </div>
@@ -2180,7 +2364,7 @@ onBeforeUnmount(() => {
                         'is-dragging': draggingVisualId === layer.clip.id,
                         'is-resizing': resizingVisualId === layer.clip.id
                       }"
-                      :style="{ ...getVisualMediaLayoutStyle(layer.clip), zIndex: layer.zIndex }"
+                      :style="{ ...getVisualPreviewStyle(layer.clip), zIndex: layer.zIndex }"
                       @pointerdown.stop="onVisualOverlayPointerDown($event, layer.clip)"
                       @dblclick.stop="openInspectorForClip(layer.clip, trackIdContainingClip(layer.clip))"
                     >
@@ -2255,6 +2439,51 @@ onBeforeUnmount(() => {
               <label>Trim Start</label>
               <input type="number" min="0" step="0.1" v-model.number="selectedClip.trimStart" @input="onInspectorChange" />
               <template v-if="selectedClip.type === 'video' || selectedClip.type === 'image'">
+                <div class="inspector-box">
+                  <div class="inspector-box-title">Hiệu ứng</div>
+                  <label class="inspector-field-label">Chuyển cảnh (→ clip sau)</label>
+                  <select v-model="selectedClip.transitionType" class="inspector-select" @change="onInspectorChange">
+                    <option v-for="fx in TRANSITION_EFFECT_TYPES" :key="'itr-' + fx.id" :value="fx.id">{{ fx.label }}</option>
+                  </select>
+                  <label v-if="selectedClip.transitionType !== 'none'" class="inspector-field-label">Thời lượng chuyển cảnh (s)</label>
+                  <input
+                    v-if="selectedClip.transitionType !== 'none'"
+                    type="number"
+                    min="0.1"
+                    max="5"
+                    step="0.1"
+                    v-model.number="selectedClip.transitionDuration"
+                    @input="onInspectorChange"
+                  />
+                  <label class="inspector-field-label">Hiện dần (fade in)</label>
+                  <select v-model="selectedClip.fadeInType" class="inspector-select" @change="onInspectorChange">
+                    <option v-for="fx in FADE_EFFECT_TYPES" :key="'ifi-' + fx.id" :value="fx.id">{{ fx.label }}</option>
+                  </select>
+                  <label v-if="selectedClip.fadeInType !== 'none'" class="inspector-field-label">Thời lượng hiện dần (s)</label>
+                  <input
+                    v-if="selectedClip.fadeInType !== 'none'"
+                    type="number"
+                    min="0.1"
+                    max="5"
+                    step="0.1"
+                    v-model.number="selectedClip.fadeInDuration"
+                    @input="onInspectorChange"
+                  />
+                  <label class="inspector-field-label">Mờ dần (fade out)</label>
+                  <select v-model="selectedClip.fadeOutType" class="inspector-select" @change="onInspectorChange">
+                    <option v-for="fx in FADE_EFFECT_TYPES" :key="'ifo-' + fx.id" :value="fx.id">{{ fx.label }}</option>
+                  </select>
+                  <label v-if="selectedClip.fadeOutType !== 'none'" class="inspector-field-label">Thời lượng mờ dần (s)</label>
+                  <input
+                    v-if="selectedClip.fadeOutType !== 'none'"
+                    type="number"
+                    min="0.1"
+                    max="5"
+                    step="0.1"
+                    v-model.number="selectedClip.fadeOutDuration"
+                    @input="onInspectorChange"
+                  />
+                </div>
                 <div class="inspector-box">
                   <div class="inspector-box-title">Vị trí & khung (kéo / góc phải-dưới trên preview)</div>
                   <label class="inspector-field-label">X %</label>
@@ -2528,6 +2757,9 @@ onBeforeUnmount(() => {
                         <div class="clip-content">
                           <span class="clip-name">{{ getResourceThumbName(clip.source || clip.text || clip.type) }}</span>
                           <span class="clip-meta">{{ clip.duration.toFixed(1) }}s</span>
+                          <span v-if="clipHasEffects(clip)" class="clip-effect-badge" title="Có hiệu ứng">
+                            <WandSparkles :size="10" />
+                          </span>
                           <button
                             v-if="clip.type === 'video' || clip.type === 'audio'"
                             type="button"
@@ -2889,6 +3121,102 @@ onBeforeUnmount(() => {
   line-height:1.45;
   max-width:14rem;
 }
+.effect-tab{
+  padding:.15rem 0 .35rem;
+  gap:.65rem;
+}
+.effect-tab-hint{
+  margin:0;
+  font-size:.66rem;
+  line-height:1.45;
+  color:var(--cap-muted);
+  padding:0 .1rem;
+}
+.effect-tab-hint--ok{color:var(--cap-accent)}
+.effect-group{
+  display:flex;
+  flex-direction:column;
+  gap:.35rem;
+}
+.effect-group-title{
+  margin:0;
+  font-size:.72rem;
+  font-weight:800;
+  color:var(--cap-text);
+}
+.effect-group-sub{
+  margin:0;
+  font-size:.62rem;
+  color:var(--cap-muted);
+  line-height:1.35;
+}
+.effect-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:.35rem;
+}
+.effect-card{
+  min-height:34px;
+  border:1px solid var(--cap-border);
+  border-radius:5px;
+  background:var(--cap-panel-2);
+  color:var(--cap-text);
+  font-size:.62rem;
+  font-weight:600;
+  line-height:1.25;
+  padding:.35rem .4rem;
+  cursor:pointer;
+  text-align:left;
+  transition:border-color .15s ease,background .15s ease,box-shadow .15s ease;
+}
+.effect-card:hover:not(:disabled){
+  border-color:var(--cap-accent-strong);
+  background:var(--cap-accent-soft);
+}
+.effect-card.active{
+  border-color:var(--cap-accent);
+  background:var(--cap-accent-soft);
+  box-shadow:0 0 0 1px color-mix(in srgb,var(--cap-accent) 35%,transparent);
+}
+.effect-card:disabled{
+  opacity:.45;
+  cursor:not-allowed;
+}
+.effect-card-label{display:block}
+.effect-duration-row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:.5rem;
+  font-size:.64rem;
+  color:var(--cap-muted);
+}
+.effect-duration-row input{
+  width:4.5rem;
+  height:26px;
+  border:1px solid var(--cap-border);
+  border-radius:4px;
+  background:var(--cap-panel);
+  color:var(--cap-text);
+  font-size:.68rem;
+  padding:0 .35rem;
+}
+.effect-clear-btn{
+  margin-top:.15rem;
+  height:28px;
+  border:1px solid var(--cap-border);
+  border-radius:5px;
+  background:transparent;
+  color:var(--cap-muted);
+  font-size:.64rem;
+  font-weight:600;
+  cursor:pointer;
+}
+.effect-clear-btn:hover:not(:disabled){
+  border-color:rgba(248,113,113,.45);
+  color:#fca5a5;
+}
+.effect-clear-btn:disabled{opacity:.4;cursor:not-allowed}
 .resource-pane-action{
   width:100%;
   height:28px;
@@ -3765,6 +4093,17 @@ onBeforeUnmount(() => {
   font-weight:600;
   color:rgba(255,255,255,.75);
   white-space:nowrap;
+  flex-shrink:0;
+}
+.clip-effect-badge{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:16px;
+  height:16px;
+  border-radius:4px;
+  background:rgba(192,132,252,.25);
+  color:#e9d5ff;
   flex-shrink:0;
 }
 .global-playhead{
