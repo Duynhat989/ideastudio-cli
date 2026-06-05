@@ -10,6 +10,7 @@ import {
   normalizeWorkflowDefaults,
   DEFAULT_WORKFLOW_MODELS,
 } from './flowApiV3.js';
+import { extractNanoFlowErrorMessage, throwNanoFlowError } from '@/utils/flowApiError.js';
 
 export { nanoImageResultUrl } from './flowApiV3.js';
 export {
@@ -477,27 +478,6 @@ export {
 
 async function pollTask(taskId, nanoToken, type, { returnData = false } = {}) {
   const url = `${FLOW_API_V3_BASE}/task?taskId=${encodeURIComponent(taskId)}`;
-  const extractTaskErrorMessage = (payload) => {
-    const mediaErrors = (payload?.data?.media || [])
-      .map((m) => {
-        const mediaStatus = m?.mediaMetadata?.mediaStatus;
-        const primary = mediaStatus?.error?.message || '';
-        const reason = Array.isArray(mediaStatus?.failureReasons) && mediaStatus.failureReasons.length
-          ? mediaStatus.failureReasons.join(', ')
-          : '';
-        return [primary, reason].filter(Boolean).join(' | ');
-      })
-      .filter(Boolean);
-    if (mediaErrors.length) return mediaErrors[0];
-    return (
-      payload?.data?.error?.message ||
-      payload?.data?.error?.status ||
-      (typeof payload?.data === 'string' ? payload.data : '') ||
-      payload?.error ||
-      payload?.message ||
-      'Task failed'
-    );
-  };
 
   while (true) {
     const response = await fetch(url, {
@@ -522,7 +502,7 @@ async function pollTask(taskId, nanoToken, type, { returnData = false } = {}) {
       await new Promise((resolve) => setTimeout(resolve, FLOW_TASK_POLL_MS));
       continue;
     }
-    throw new Error(extractTaskErrorMessage(result));
+    throwNanoFlowError(result);
   }
 }
 
@@ -537,7 +517,7 @@ async function createFlowTask(path, body, nanoToken) {
   });
   const data = await response.json();
   if (!response.ok || !data?.taskId) {
-    throw new Error(data.message || data.error || `Failed to create task (${response.status})`);
+    throwNanoFlowError(data, `Failed to create task (${response.status})`);
   }
   return data.taskId;
 }

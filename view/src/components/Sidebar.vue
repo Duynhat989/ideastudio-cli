@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
     GitCompareArrows,
+    Clapperboard,
     Image,
     Video,
     Settings,
@@ -33,6 +34,7 @@ const menuItems = [
     { id: 'Gen Image', icon: Image, labelKey: 'nav.genImage' },
     { id: 'Gen Video', icon: Video, labelKey: 'nav.genVideo' },
     { id: 'Workflow Video', icon: GitCompareArrows, labelKey: 'nav.workflowVideo' },
+    { id: 'StoryBoard', icon: Clapperboard, labelKey: 'nav.storyBoard' },
     { id: 'Setup', icon: Settings, labelKey: 'nav.setup' },
 ]
 
@@ -186,10 +188,12 @@ const formatBalance = (n) => {
     display: flex;
     flex-direction: column;
     width: var(--sidebar-w-expanded);
-    min-height: 100vh;
+    height: 100%;
+    max-height: 100%;
     flex-shrink: 0;
     box-sizing: border-box;
     padding: 22px 16px;
+    overflow: hidden;
     border-right: 1px solid var(--color-border);
     background:
         linear-gradient(165deg, rgba(250, 204, 21, 0.1) 0%, transparent 38%),
@@ -210,8 +214,10 @@ const formatBalance = (n) => {
     display: flex;
     flex-direction: column;
     gap: 22px;
+    height: 100%;
     min-height: 0;
     flex: 1;
+    overflow: hidden;
 }
 
 .sidebar-header {
@@ -362,6 +368,8 @@ const formatBalance = (n) => {
     flex-direction: column;
     gap: 6px;
     flex: 1;
+    min-height: 0;
+    overflow: hidden;
 }
 
 .sidebar-footer {
@@ -540,7 +548,9 @@ const formatBalance = (n) => {
     .sidebar,
     .sidebar.is-collapsed {
         width: 100%;
-        min-height: auto;
+        height: auto;
+        max-height: none;
+        overflow: visible;
         border-right: 0;
         border-bottom: 1px solid var(--color-border);
         padding: 16px 14px 14px;
@@ -548,6 +558,8 @@ const formatBalance = (n) => {
 
     .sidebar-inner {
         gap: 16px;
+        height: auto;
+        overflow: visible;
     }
 
     .brand-row {
@@ -555,6 +567,7 @@ const formatBalance = (n) => {
     }
 
     .menu-list {
+        overflow: visible;
         flex-direction: row;
         flex-wrap: wrap;
         gap: 8px;

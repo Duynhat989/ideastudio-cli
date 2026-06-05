@@ -10,6 +10,7 @@ let flowConfigPopupOpenCount = 0;
 const { t } = useI18n();
 const slots = useSlots();
 const hasRunSlot = computed(() => typeof slots.run === 'function');
+const hasErrorSlot = computed(() => typeof slots.error === 'function');
 
 const props = defineProps({
   label: { type: String, required: true },
@@ -183,6 +184,9 @@ defineExpose({ openConfig: () => { configOpen.value = true; }, closeConfig });
               </span>
             </p>
           </div>
+        </div>
+        <div v-if="hasErrorSlot" class="flow-node-error">
+          <slot name="error" />
         </div>
       </div>
     </div>
@@ -413,6 +417,23 @@ defineExpose({ openConfig: () => { configOpen.value = true; }, closeConfig });
   100% {
     left: 100%;
   }
+}
+
+.flow-node-error {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+  padding: 0.45rem 0.55rem 0.5rem;
+  box-sizing: border-box;
+  pointer-events: auto;
+  background: linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.88) 0%,
+    rgba(0, 0, 0, 0.55) 55%,
+    transparent 100%
+  );
 }
 
 .flow-node-chrome {
@@ -743,6 +764,7 @@ defineExpose({ openConfig: () => { configOpen.value = true; }, closeConfig });
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
+.flow-node-error .fn-error,
 .flow-node-config-body .fn-error {
   font-size: 0.72rem;
   color: #f87171;
@@ -753,6 +775,14 @@ defineExpose({ openConfig: () => { configOpen.value = true; }, closeConfig });
   cursor: copy;
   text-align: left;
   width: 100%;
+  box-sizing: border-box;
+  display: block;
+  margin: 0;
+  font-family: inherit;
+  line-height: 1.35;
+  word-break: break-word;
+  max-height: 4.5rem;
+  overflow-y: auto;
 }
 
 .flow-node-config-body .fn-muted {

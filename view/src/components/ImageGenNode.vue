@@ -147,7 +147,9 @@ const copyError = async () => {
           </div>
         </div>
         <button type="button" class="fn-btn fn-btn-ghost" @click="onDuplicate">{{ t('common.duplicate') }}</button>
-        <button v-if="data.error" type="button" class="fn-error" @click="copyError">{{ data.error }}</button>
+      </template>
+      <template v-if="data.error" #error>
+        <button type="button" class="fn-error" @click="copyError">{{ data.error }}</button>
       </template>
       <template #run>
         <button

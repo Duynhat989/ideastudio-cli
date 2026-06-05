@@ -107,7 +107,9 @@ const { elapsedLabel } = useFlowNodeGenTimer(nodeStatus);
           <Copy :size="14" />
           Nhân đôi
         </button>
-        <p v-if="data.error" class="fn-error" style="cursor: default">{{ data.error }}</p>
+      </template>
+      <template v-if="data.error" #error>
+        <p class="fn-error" style="cursor: default">{{ data.error }}</p>
       </template>
       <template #run>
         <button

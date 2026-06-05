@@ -9,6 +9,7 @@ export function isLikelyFlowVideoUrl(s) {
   if (t.startsWith('blob:')) return true;
   if (/\.(mp4|webm|mov|m4v|avi|mkv|ogv|m3u8)(\?|#|$)/i.test(t)) return true;
   if (/-video-\d+/i.test(s)) return true;
+  if (/-scene-video-/i.test(s)) return true;
   if (/\/videos?\//i.test(t)) return true;
   if (t.includes('type=video')) return true;
   return false;
@@ -20,6 +21,7 @@ export function isLikelyFlowImageUrl(s) {
   if (t.startsWith('data:image/')) return true;
   if (/\.(png|jpe?g|webp|gif|bmp|svg)(\?|#|$)/i.test(t)) return true;
   if (/-image-\d+/i.test(s)) return true;
+  if (/-scene-image-/i.test(s)) return true;
   return false;
 }
 

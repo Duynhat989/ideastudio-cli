@@ -149,7 +149,9 @@ const busy = computed(() => props.data?.status === 'running');
             @input="data.onChange?.({ intervalSec: Math.max(1, Number($event.target.value) || 1) })"
           />
         </div>
-        <p v-if="data.error" class="fn-error">{{ data.error }}</p>
+      </template>
+      <template v-if="data.error" #error>
+        <p class="fn-error">{{ data.error }}</p>
       </template>
       <template #run>
         <button

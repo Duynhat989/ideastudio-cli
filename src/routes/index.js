@@ -35,8 +35,11 @@ API_HOST.use(bodyParser.urlencoded({ limit: '500mb', extended: true }));
 
 // Services
 const project = require('../services/project.service')
+const storyboard = require('../services/storyboard.service')
 const metaService = require('../services/meta.service')
 const renderService = require('../services/render.service')
+
+const STORYBOARD_STORAGE_PATH = path.join(projectPath, 'metadata', 'storyboards')
 // Project services
 API_HOST.get('/api/projects', project.list.bind(project));
 API_HOST.post('/api/projects/create', project.create.bind(project));
@@ -80,6 +83,52 @@ API_HOST.post('/api/projects/:id/assets/upload', (req, res) => {
             return res.status(400).json({ success: false, message: err.message || 'Upload lỗi' })
         }
         project.saveAssetUpload(req, res)
+    })
+})
+
+// Storyboard projects
+API_HOST.get('/api/storyboards', storyboard.list.bind(storyboard));
+API_HOST.get('/api/storyboards/:id', storyboard.getOne.bind(storyboard));
+API_HOST.post('/api/storyboards/create', storyboard.create.bind(storyboard));
+API_HOST.put('/api/storyboards/:id', storyboard.update.bind(storyboard));
+API_HOST.get('/api/storyboards/:id/timeline', storyboard.getTimeline.bind(storyboard));
+API_HOST.put('/api/storyboards/:id/timeline', storyboard.saveTimeline.bind(storyboard));
+API_HOST.delete('/api/storyboards/:id', storyboard.delete.bind(storyboard));
+API_HOST.post('/api/storyboards/:id/assets', storyboard.saveAsset.bind(storyboard));
+
+const storyboardUploadStorage = multer.diskStorage({
+    destination(req, file, cb) {
+        const id = req.params.id
+        const dir = path.join(STORYBOARD_STORAGE_PATH, id, 'assets')
+        try {
+            fs.mkdirSync(dir, { recursive: true })
+            cb(null, dir)
+        } catch (e) {
+            cb(e)
+        }
+    },
+    filename(req, file, cb) {
+        const kind = String(req.body?.kind || 'upload').replace(/[^a-zA-Z0-9-_]/g, '_')
+        const rawExt = path.extname(file.originalname || '')
+        const ext = rawExt && rawExt.length <= 10 ? rawExt.toLowerCase() : '.bin'
+        const hash = crypto.randomBytes(8).toString('hex')
+        cb(null, `${kind}-${Date.now()}-${hash}${ext}`)
+    }
+})
+const storyboardUpload = multer({
+    storage: storyboardUploadStorage,
+    limits: { fileSize: 512 * 1024 * 1024 }
+})
+
+API_HOST.post('/api/storyboards/:id/assets/upload', (req, res) => {
+    storyboardUpload.single('file')(req, res, (err) => {
+        if (err) {
+            if (err.code === 'LIMIT_FILE_SIZE') {
+                return res.status(413).json({ success: false, message: 'File quá lớn (tối đa 512MB).' })
+            }
+            return res.status(400).json({ success: false, message: err.message || 'Upload lỗi' })
+        }
+        storyboard.saveAssetUpload(req, res)
     })
 })
 
@@ -194,6 +243,7 @@ API_HOST.post('/api/render/start', renderService.startRender.bind(renderService)
 API_HOST.get('/api/render/jobs/:jobId', renderService.getRenderJob.bind(renderService))
 API_HOST.post('/api/render/jobs/:jobId/cancel', renderService.cancelRenderJob.bind(renderService))
 API_HOST.use('/resources', express.static(path.join(require('../../config').projectPath, 'metadata', 'resources')))
+API_HOST.use('/storyboards', express.static(path.join(require('../../config').projectPath, 'metadata', 'storyboards')))
 API_HOST.use('/renders', express.static(path.join(require('../../config').projectPath, 'metadata', 'renders')))
 
 // (req, res) => {

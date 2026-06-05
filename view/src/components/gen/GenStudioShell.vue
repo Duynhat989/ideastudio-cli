@@ -184,8 +184,7 @@ const onPromptKeydown = (e) => {
   position: relative;
   width: 100%;
   height: 100%;
-  min-height: calc(100vh - 1rem);
-  height: calc(100vh - 1rem);
+  min-height: 0;
   display: flex;
   flex-direction: column;
   color: #f3f4f6;

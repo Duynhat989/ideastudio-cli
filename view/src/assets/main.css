@@ -14,6 +14,11 @@
 	--color-accent-bg-fade-2: rgba(250, 204, 21, 0.1);
 	--color-danger: #ef4444;
 	--card-bg: #13151a;
+	--sb-scroll-size: 7px;
+	--sb-scroll-track: rgba(9, 9, 11, 0.35);
+	--sb-scroll-thumb: rgba(107, 114, 128, 0.55);
+	--sb-scroll-thumb-hover: rgba(156, 163, 175, 0.75);
+	--sb-scroll-thumb-active: rgba(250, 204, 21, 0.55);
 }
 
 * {
@@ -24,9 +29,13 @@ html,
 body,
 #app {
 	width: 100%;
-	min-height: 100%;
+	height: 100%;
 	margin: 0;
 	padding: 0;
+}
+
+html {
+	overflow: hidden;
 }
 
 body {
@@ -36,6 +45,11 @@ body {
 		radial-gradient(circle at 95% 15%, var(--color-accent-bg-fade-2), transparent 28%),
 		var(--color-bg);
 	color: var(--color-text);
+	overflow: hidden;
+}
+
+#app {
+	overflow: hidden;
 }
 
 
@@ -59,4 +73,114 @@ body {
 }
 .vue-flow__handle-left{
 	z-index: 999 !important;
+}
+
+/* ── Shared scrollbars (storyboard + app) ── */
+.sb-scroll,
+.sb-textarea,
+.custom-scrollbar {
+	scrollbar-width: thin;
+	scrollbar-color: var(--sb-scroll-thumb) var(--sb-scroll-track);
+}
+
+.sb-scroll::-webkit-scrollbar,
+.sb-textarea::-webkit-scrollbar,
+.custom-scrollbar::-webkit-scrollbar {
+	width: var(--sb-scroll-size);
+	height: var(--sb-scroll-size);
+}
+
+.sb-scroll::-webkit-scrollbar-track,
+.sb-textarea::-webkit-scrollbar-track,
+.custom-scrollbar::-webkit-scrollbar-track {
+	background: var(--sb-scroll-track);
+	border-radius: 999px;
+	margin: 3px;
+}
+
+.sb-scroll::-webkit-scrollbar-thumb,
+.sb-textarea::-webkit-scrollbar-thumb,
+.custom-scrollbar::-webkit-scrollbar-thumb {
+	background: linear-gradient(180deg, rgba(156, 163, 175, 0.65), rgba(107, 114, 128, 0.55));
+	border-radius: 999px;
+	border: 2px solid transparent;
+	background-clip: padding-box;
+}
+
+.sb-scroll::-webkit-scrollbar-thumb:hover,
+.sb-textarea::-webkit-scrollbar-thumb:hover,
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+	background: linear-gradient(180deg, rgba(209, 213, 219, 0.85), rgba(156, 163, 175, 0.75));
+	background-clip: padding-box;
+}
+
+.sb-scroll::-webkit-scrollbar-thumb:active,
+.sb-textarea::-webkit-scrollbar-thumb:active,
+.custom-scrollbar::-webkit-scrollbar-thumb:active {
+	background: var(--sb-scroll-thumb-active);
+	background-clip: padding-box;
+}
+
+.sb-scroll::-webkit-scrollbar-corner,
+.sb-textarea::-webkit-scrollbar-corner,
+.custom-scrollbar::-webkit-scrollbar-corner {
+	background: transparent;
+}
+
+/* ── Shared textarea (storyboard) ── */
+.sb-textarea {
+	width: 100%;
+	border: 1px solid var(--color-border);
+	border-radius: 10px;
+	background: rgba(9, 9, 11, 0.72);
+	color: var(--color-text);
+	padding: 10px 12px;
+	font-family: inherit;
+	font-size: 0.78rem;
+	line-height: 1.55;
+	resize: vertical;
+	transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+
+.sb-textarea::placeholder {
+	color: var(--color-text-muted);
+	opacity: 0.72;
+}
+
+.sb-textarea:focus,
+.sb-textarea:focus-visible {
+	outline: none;
+	border-color: rgba(250, 204, 21, 0.42);
+	box-shadow:
+		0 0 0 1px rgba(250, 204, 21, 0.14),
+		inset 0 1px 0 rgba(255, 255, 255, 0.04);
+	background: rgba(9, 9, 11, 0.88);
+}
+
+.sb-textarea--readonly {
+	resize: none;
+	color: var(--color-text-muted);
+	background: rgba(9, 9, 11, 0.55);
+	cursor: default;
+}
+
+.sb-textarea--readonly:focus,
+.sb-textarea--readonly:focus-visible {
+	border-color: var(--color-border);
+	box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+	background: rgba(9, 9, 11, 0.55);
+}
+
+.sb-textarea--mono {
+	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+	font-size: 0.72rem;
+	letter-spacing: 0.01em;
+}
+
+.sb-textarea--env:focus,
+.sb-textarea--env:focus-visible {
+	border-color: rgba(34, 197, 94, 0.45);
+	box-shadow:
+		0 0 0 1px rgba(34, 197, 94, 0.14),
+		inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }

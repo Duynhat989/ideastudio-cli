@@ -3,6 +3,7 @@ import { computed, ref, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Sidebar from './components/Sidebar.vue'
 import FlowAI from './pages/FlowAI.vue'
+import StoryBoard from './pages/StoryBoard.vue'
 import GenImage from './pages/GenImage.vue'
 import GenVideo from './pages/GenVideo.vue'
 import FlowStores from './pages/FlowStores.vue'
@@ -34,6 +35,7 @@ const pageMap = {
 	'Gen Image': GenImage,
 	'Gen Video': GenVideo,
 	'Workflow Video': FlowAI,
+	'StoryBoard': StoryBoard,
 	// 'WorkFlow Store': FlowStores,
 	// 'Browser Profiles': BrowserProfiles,
 	Setup
@@ -385,25 +387,39 @@ body {
 /* --- Main App Layout --- */
 .app-shell {
 	display: grid;
-	grid-template-columns: auto 1fr;
-	min-height: 100vh;
+	grid-template-columns: auto minmax(0, 1fr);
+	grid-template-rows: 1fr;
+	height: 100vh;
+	height: 100dvh;
+	max-height: 100vh;
+	max-height: 100dvh;
+	overflow: hidden;
 }
 
 .app-main {
 	width: 100%;
-	min-height: 100vh;
+	height: 100%;
+	min-width: 0;
+	min-height: 0;
+	overflow-x: hidden;
+	overflow-y: auto;
 	background: var(--bg-page);
+	-webkit-overflow-scrolling: touch;
 }
 
 .app {
 	width: 100%;
-	min-height: 100vh;
+	height: 100%;
+	min-height: 0;
+	overflow-x: hidden;
+	overflow-y: auto;
 	background: var(--bg-page);
 }
 
 @media (max-width: 960px) {
 	.app-shell {
 		grid-template-columns: 1fr;
+		grid-template-rows: auto minmax(0, 1fr);
 	}
 }
 

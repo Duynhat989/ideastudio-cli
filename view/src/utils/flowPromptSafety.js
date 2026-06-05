@@ -33,17 +33,22 @@ export function isPolicyBlockedError(error) {
   return m.includes('PUBLIC_ERROR_SEXUAL') || m.includes('NCII') || m.includes('MEDIA_GENERATION_STATUS_FAILED');
 }
 
-export function sanitizeImagePromptForSafety(prompt) {
+/**
+ * @param {string} prompt
+ * @param {number} [maxLength=320] — max chars after sanitize; use 0 or negative for no limit
+ */
+export function sanitizeImagePromptForSafety(prompt, maxLength = 320) {
   let text = String(prompt || '').trim();
   if (!text) return '';
   SENSITIVE_IMAGE_WORDS.forEach((pattern) => {
     text = text.replace(pattern, '');
   });
   text = text.replace(/\s{2,}/g, ' ').replace(/\s+\./g, '.').replace(/\.{2,}/g, '.').trim();
-  return clampText(text, 320);
+  if (maxLength > 0) return clampText(text, maxLength);
+  return text;
 }
 
-export function sanitizeVideoPromptForSafety(prompt) {
+export function sanitizeVideoPromptForSafety(prompt, maxLength = 320) {
   let text = String(prompt || '').trim();
   if (!text) return '';
   SENSITIVE_VIDEO_WORDS.forEach((pattern) => {
@@ -59,5 +64,5 @@ export function sanitizeVideoPromptForSafety(prompt) {
       .replace(/\b(very\s+close[-\s]?up\s+body)\b/gi, 'medium shot');
   }
   text = text.replace(/\s{2,}/g, ' ').replace(/\s+\./g, '.').replace(/\.{2,}/g, '.').trim();
-  return clampText(text, 320);
+  return clampText(text, maxLength);
 }

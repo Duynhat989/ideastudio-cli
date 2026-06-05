@@ -23,9 +23,10 @@ import {
   Eye,
   EyeOff
 } from 'lucide-vue-next';
-import { projectService } from '@/services/project.service';
 import { notify } from '@/composables/useNotify.js';
 import { runtime } from '@/services/runtime';
+import { getRenderProjectApi, RENDER_PROJECT_KIND } from '@/services/renderProject.service.js';
+import { isLikelyFlowImageUrl, isLikelyFlowVideoUrl } from '@/utils/flowMedia.js';
 import {
   FADE_EFFECT_TYPES,
   TRANSITION_EFFECT_TYPES,
@@ -37,8 +38,22 @@ const props = defineProps({
   sourceAssets: { type: Array, default: () => [] },
   /** Project hiện tại — dùng upload asset lên server */
   projectId: { type: String, default: '' },
+  /** workflow | storyboard — chọn API lưu timeline/assets */
+  projectKind: {
+    type: String,
+    default: RENDER_PROJECT_KIND.workflow,
+    validator: (v) => v === RENDER_PROJECT_KIND.workflow || v === RENDER_PROJECT_KIND.storyboard,
+  },
+  /** Khi chưa có timeline.json — gợi ý tỷ lệ khung (portrait | landscape | square) */
+  defaultAspectRatio: {
+    type: String,
+    default: '',
+    validator: (v) => !v || v === 'portrait' || v === 'landscape' || v === 'square',
+  },
 });
 const emit = defineEmits(['back']);
+
+const renderProjectApi = computed(() => getRenderProjectApi(props.projectKind));
 
 const TRACK_LABEL_WIDTH = 110;
 const TRACK_GAP_PX = 0;
@@ -192,7 +207,15 @@ const onBoxNativeColorInput = (e) => {
   onInspectorChange();
 };
 
-const resources = ref([...(props.sourceAssets || [])]);
+const normalizeIncomingSourceAssets = (list) => {
+  const arr = Array.isArray(list) ? list : [];
+  if (props.projectKind === RENDER_PROJECT_KIND.storyboard) {
+    return arr.filter((url) => isLikelyFlowVideoUrl(url) && !isLikelyFlowImageUrl(url));
+  }
+  return arr;
+};
+
+const resources = ref([...normalizeIncomingSourceAssets(props.sourceAssets)]);
 const uniqNonEmptyStrings = (arr = []) => {
   const out = [];
   const seen = new Set();
@@ -217,6 +240,28 @@ const collectClipSources = (trackList = []) => {
   }
   return uniqNonEmptyStrings(sources);
 };
+
+const mergeSourceAssetsIntoResources = (list) => {
+  const clipSources = collectClipSources(tracks.value);
+  const incoming = normalizeIncomingSourceAssets(list);
+
+  if (props.projectKind === RENDER_PROJECT_KIND.storyboard) {
+    const keep = (resources.value || []).filter((url) => {
+      if (clipSources.includes(url)) return true;
+      return isLikelyFlowVideoUrl(url) && !isLikelyFlowImageUrl(url);
+    });
+    resources.value = uniqNonEmptyStrings([...incoming, ...keep, ...clipSources]);
+    return;
+  }
+
+  resources.value = uniqNonEmptyStrings([
+    ...(resources.value || []),
+    ...incoming,
+    ...(Array.isArray(list) ? list : []),
+    ...clipSources
+  ]);
+};
+
 const tracks = ref([
   { id: 'track-1', name: 'Track 1', type: 'visual', hidden: false, clips: [] },
   { id: 'track-2', name: 'Track 2', type: 'visual', hidden: false, clips: [] },
@@ -459,6 +504,8 @@ const renderModalOpen = ref(false);
 /** setup | progress | done | error */
 const renderModalStep = ref('setup');
 const renderQuality = ref('hd');
+/** Làm mờ logo + chữ Veo 3 ở góc dưới phải trên clip video nguồn. */
+const blurVeoWatermark = ref(false);
 const renderOutputPath = ref('');
 const renderProgress = ref(0);
 const renderJobId = ref('');
@@ -662,7 +709,7 @@ const startLayoutSplitDrag = (e, kind) => {
 const onSplitMediaPlayerDown = (e) => startLayoutSplitDrag(e, 'media-player');
 const onSplitPlayerInspectorDown = (e) => startLayoutSplitDrag(e, 'player-inspector');
 
-const isVideo = (url = '') => ['.mp4', '.webm', '.mov', '.mkv'].some((ext) => url.toLowerCase().includes(ext)) || url.includes('video');
+const isVideo = (url = '') => isLikelyFlowVideoUrl(url) && !isLikelyFlowImageUrl(url);
 const isAudio = (url = '') =>
   ['.mp3', '.wav', '.aac', '.m4a', '.ogg', '.flac', '.opus'].some((ext) => url.toLowerCase().includes(ext)) ||
   url.includes('audio');
@@ -789,7 +836,7 @@ const onAddExternalFiles = async (e) => {
   try {
     for (const file of files) {
       const kind = assetKindFromFile(file);
-      const res = await projectService.saveAssetFile(props.projectId, file, {
+      const res = await renderProjectApi.value.saveAssetFile(props.projectId, file, {
         nodeId: 'render-resource',
         kind,
       });
@@ -1771,6 +1818,9 @@ const applyLoadedTimeline = async (data) => {
   timelineHydrating = true;
   try {
     const loadedResources = Array.isArray(data.resources) ? data.resources.slice() : [];
+    const filteredLoadedResources = props.projectKind === RENDER_PROJECT_KIND.storyboard
+      ? loadedResources.filter((url) => isLikelyFlowVideoUrl(url) && !isLikelyFlowImageUrl(url))
+      : loadedResources;
     if (Array.isArray(data.tracks) && data.tracks.length) {
       tracks.value = data.tracks.map((t) => ({
         id: String(t.id || generateId()),
@@ -1783,8 +1833,8 @@ const applyLoadedTimeline = async (data) => {
     // IMPORTANT: resources must include timeline clip sources even when not listed in JSON resources.
     const clipSources = collectClipSources(tracks.value);
     resources.value = uniqNonEmptyStrings([
-      ...(props.sourceAssets || []),
-      ...loadedResources,
+      ...normalizeIncomingSourceAssets(props.sourceAssets),
+      ...filteredLoadedResources,
       ...clipSources
     ]);
     if (data.aspectRatio === 'portrait' || data.aspectRatio === 'landscape' || data.aspectRatio === 'square') {
@@ -1818,7 +1868,7 @@ const applyLoadedTimeline = async (data) => {
 const persistTimelineToBackend = async () => {
   if (!props.projectId) return;
   try {
-    await projectService.saveTimeline(props.projectId, timelineSerialize());
+    await renderProjectApi.value.saveTimeline(props.projectId, timelineSerialize());
   } catch {
     /* ignore */
   }
@@ -1838,10 +1888,14 @@ const loadTimelineFromBackend = async () => {
   timelineReady = false;
   layoutWidthsReady.value = false;
   try {
-    const res = await projectService.getTimeline(props.projectId);
-    if (res?.success && res.data) await applyLoadedTimeline(res.data);
+    const res = await renderProjectApi.value.getTimeline(props.projectId);
+    if (res?.success && res.data) {
+      await applyLoadedTimeline(res.data);
+    } else if (props.defaultAspectRatio) {
+      aspectRatio.value = props.defaultAspectRatio;
+    }
   } catch {
-    /* ignore */
+    if (props.defaultAspectRatio) aspectRatio.value = props.defaultAspectRatio;
   } finally {
     void nextTick(() => {
       if (!layoutWidthsReady.value) initLayoutWidths();
@@ -1959,6 +2013,7 @@ const startRenderFromModal = async () => {
         timeline: renderTimelinePayload.value,
         aspectRatio: aspectRatio.value,
         quality: renderQuality.value,
+        blurVeoWatermark: blurVeoWatermark.value,
         previewFrame: getPreviewFrameMetrics(),
         outputPath: renderOutputPath.value || undefined
       })
@@ -2041,12 +2096,7 @@ watch(
 watch(
   () => props.sourceAssets,
   (list) => {
-    const clipSources = collectClipSources(tracks.value);
-    resources.value = uniqNonEmptyStrings([
-      ...(resources.value || []),
-      ...(Array.isArray(list) ? list : []),
-      ...clipSources
-    ]);
+    mergeSourceAssetsIntoResources(list);
   },
   { deep: true }
 );
@@ -2819,6 +2869,13 @@ onBeforeUnmount(() => {
             <option value="hd">HD (1920×1080)</option>
             <option value="2k">2K (2560×1440)</option>
           </select>
+          <label class="render-modal-check">
+            <input v-model="blurVeoWatermark" type="checkbox" />
+            <span>Làm mờ logo Veo 3 (góc dưới phải)</span>
+          </label>
+          <p v-if="blurVeoWatermark" class="render-modal-hint">
+            Áp dụng blur theo độ phân giải từng clip video trước khi ghép timeline.
+          </p>
         </div>
 
         <div class="render-modal-fields">
@@ -4201,6 +4258,16 @@ onBeforeUnmount(() => {
   font-size:.82rem;
 }
 .render-modal-select{cursor:pointer}
+.render-modal-check{
+  display:flex;align-items:flex-start;gap:.5rem;margin-top:.55rem;
+  font-size:.82rem;font-weight:600;color:var(--is-text);cursor:pointer;user-select:none;
+}
+.render-modal-check input[type="checkbox"]{
+  width:1rem;height:1rem;margin-top:.12rem;flex-shrink:0;accent-color:var(--is-gold);cursor:pointer;
+}
+.render-modal-hint{
+  margin:0;font-size:.72rem;line-height:1.4;color:var(--is-muted);
+}
 .render-modal-path-row{display:flex;gap:.45rem;align-items:center}
 .render-modal-path-row .render-modal-input{flex:1;min-width:0}
 .render-modal-input:read-only{opacity:.88;cursor:default}

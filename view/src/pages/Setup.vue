@@ -8,16 +8,15 @@ import { setAppLocale, getAppLocale } from '@/i18n/index.js'
 const { t } = useI18n()
 
 const geminiApiKey = ref('')
-const geminiModel = ref('gemini-3-flash-preview')
+const geminiModel = ref('gemini-3.1-flash-lite')
 const nanoApiKey = ref('')
 const locale = ref(getAppLocale())
 const showGeminiApiKey = ref(false)
 const showNanoApiKey = ref(false)
 const geminiModelOptions = [
-  'gemini-3-flash-preview',
+  'gemini-3.1-flash-lite',
   'gemini-2.5-flash',
-  'gemini-2.0-flash',
-  'gemini-1.5-flash',
+  'gemini-2.5-flash-lite'
 ]
 
 const STORAGE_KEY = 'ideastudio.setup'
@@ -109,7 +108,7 @@ onMounted(() => {
       setAppLocale(saved.locale)
     }
     geminiApiKey.value = saved?.gemini?.apiKey || ''
-    geminiModel.value = saved?.gemini?.model || 'gemini-3-flash-preview'
+    geminiModel.value = saved?.gemini?.model || 'gemini-2.5-flash-lite'
     nanoApiKey.value = saved?.nano?.apiKey || ''
     const legacyTier = saved?.nano?.videoTier === 'pro' ? 'pro' : 'ultra'
 

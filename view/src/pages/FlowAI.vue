@@ -50,6 +50,8 @@ import ProjectManagerPage from '@/components/ProjectManagerPage.vue';
 import RenderView from './RenderView.vue';
 import { isLikelyFlowVideoUrl } from '@/utils/flowMedia.js';
 import { cssAspectRatioFromProject } from '@/utils/flowProjectAspect.js';
+import { collectWorkflowSourceAssets } from '@/utils/renderSourceAssets.js';
+import { RENDER_PROJECT_KIND } from '@/services/renderProject.service.js';
 
 import {
     generateNanoImage,
@@ -281,15 +283,7 @@ const initialNodes = [
     },
 ];
 
-const sourceAssets = computed(() => {
-    const resources = [];
-    nodes.value.filter((n) => n.type === 'source').forEach((n) => {
-        (n.data?.inputs || []).forEach((item) => {
-            if (typeof item === 'string' && item) resources.push(item);
-        });
-    });
-    return Array.from(new Set(resources));
-});
+const sourceAssets = computed(() => collectWorkflowSourceAssets(nodes.value));
 
 // --- CORE FUNCTIONS (API & STORAGE) ---
 const projectOpenData = ref({});
@@ -2025,7 +2019,6 @@ watch(() => props.openProjectManagerKey, () => {
                 <div class="sidebar-content custom-scrollbar">
                     <div class="action-buttons">
                         <div class="action-group">
-                            <p class="action-group-label">Workspace</p>
                             <div class="action-group-track">
                                 <button
                                     type="button"
@@ -2051,7 +2044,6 @@ watch(() => props.openProjectManagerKey, () => {
                         <div class="action-group-sep" aria-hidden="true"></div>
 
                         <div class="action-group">
-                            <p class="action-group-label">Flow</p>
                             <div class="action-group-track">
                                 <input
                                     type="file"
@@ -2139,8 +2131,13 @@ watch(() => props.openProjectManagerKey, () => {
             :current-project-id="currentProjectId" @load="handleProjectLoad" @create="handleProjectLoad"
             @delete="handleProjectDelete" @rename="handleProjectRename" />
 
-        <RenderView v-else-if="isRenderViewOpen && currentProjectId" :source-assets="sourceAssets"
-            :project-id="currentProjectId" @back="isRenderViewOpen = false" />
+        <RenderView
+            v-else-if="isRenderViewOpen && currentProjectId"
+            :source-assets="sourceAssets"
+            :project-id="currentProjectId"
+            :project-kind="RENDER_PROJECT_KIND.workflow"
+            @back="isRenderViewOpen = false"
+        />
 
         <div class="canvas-container" v-else-if="isLoaded && currentProjectId">
             <VueFlow :nodes="nodes" :edges="edges" :node-types="nodeTypes" fit-view-on-init :min-zoom="0.05"
@@ -2288,7 +2285,8 @@ watch(() => props.openProjectManagerKey, () => {
 <style scoped>
 .app-container {
     width: 100%;
-    height: 100vh;
+    height: 100%;
+    min-height: 0;
     background-color: #09090b;
     color: #f4f4f5;
     display: flex;
@@ -2321,7 +2319,7 @@ watch(() => props.openProjectManagerKey, () => {
     transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
     box-shadow: 0 8px 20px rgba(0, 0, 0, 0.28);
-    padding: 0.4rem 0.75rem 0.45rem;
+    padding: 16px;
 }
 
 .sidebar-toolbar {

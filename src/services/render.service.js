@@ -13,6 +13,7 @@ const {
     normalizeEffectType,
     resolveTransitionDuration
 } = require('../shared/renderEffects');
+const { buildVeoBlurFilterPart } = require('../shared/veoWatermark');
 
 const RENDER_DIR = path.join(projectPath, 'metadata', 'renders');
 if (!fs.existsSync(RENDER_DIR)) {
@@ -199,22 +200,28 @@ class RenderService {
         });
     }
 
-    buildClipSegmentChain(clip, bw, bh, ow, oh, outLabel) {
+    buildClipSegmentChain(clip, bw, bh, ow, oh, outLabel, opts = {}) {
         const trim = clip.clipStart > 0
             ? `trim=start=${clip.clipStart}:duration=${clip.clipDuration},`
             : `trim=duration=${clip.clipDuration},`;
         const fades = buildFadeFilters(clip, clip.clipDuration);
         const fadePart = fades.length ? `,${fades.join(',')}` : '';
-        return `${trim}setpts=PTS-STARTPTS,fps=${OUTPUT_FPS},scale=${ow}:${oh},pad=${bw}:${bh}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1${fadePart}[${outLabel}]`;
+        const veoPart = opts.blurVeoWatermark && clip.isVideo && opts.iw && opts.ih
+            ? `,${buildVeoBlurFilterPart(opts.iw, opts.ih, opts.veoTag || outLabel)}`
+            : '';
+        return `${trim}setpts=PTS-STARTPTS,fps=${OUTPUT_FPS}${veoPart},scale=${ow}:${oh},pad=${bw}:${bh}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1${fadePart}[${outLabel}]`;
     }
 
-    buildSingleClipStreamChain(clip, bw, bh, ow, oh, t0, outLabel) {
+    buildSingleClipStreamChain(clip, bw, bh, ow, oh, t0, outLabel, opts = {}) {
         const trim = clip.clipStart > 0
             ? `trim=start=${clip.clipStart}:duration=${clip.clipDuration},`
             : `trim=duration=${clip.clipDuration},`;
         const fades = buildFadeFilters(clip, clip.clipDuration);
         const fadePart = fades.length ? `,${fades.join(',')}` : '';
-        return `${trim}setpts=PTS-STARTPTS,fps=${OUTPUT_FPS},scale=${ow}:${oh},pad=${bw}:${bh}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1${fadePart},setpts=PTS-STARTPTS+${t0}/TB,tpad=stop_mode=clone:stop_duration=${FRAME_DUR}[${outLabel}]`;
+        const veoPart = opts.blurVeoWatermark && clip.isVideo && opts.iw && opts.ih
+            ? `,${buildVeoBlurFilterPart(opts.iw, opts.ih, opts.veoTag || outLabel)}`
+            : '';
+        return `${trim}setpts=PTS-STARTPTS,fps=${OUTPUT_FPS}${veoPart},scale=${ow}:${oh},pad=${bw}:${bh}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1${fadePart},setpts=PTS-STARTPTS+${t0}/TB,tpad=stop_mode=clone:stop_duration=${FRAME_DUR}[${outLabel}]`;
     }
 
     /** Ghép các segment trong chain: concat hoặc xfade tùy transition giữa clip. */
@@ -321,7 +328,15 @@ class RenderService {
     }
 
     buildRenderPlan(payload = {}) {
-        const { timeline = [], aspectRatio = 'landscape', quality = 'hd', previewFrame = null, durationPerImage = 3 } = payload;
+        const {
+            timeline = [],
+            aspectRatio = 'landscape',
+            quality = 'hd',
+            previewFrame = null,
+            durationPerImage = 3,
+            blurVeoWatermark = false
+        } = payload;
+        const applyVeoBlur = Boolean(blurVeoWatermark);
         if (!Array.isArray(timeline) || timeline.length === 0) {
             throw new Error('Timeline is empty');
         }
@@ -469,7 +484,12 @@ class RenderService {
                     clip.inputIndex = inIdx;
                     visualInputIndices.push({ clip, inIdx });
                     const segLabel = `chs${unitIdx}_${segIdx}`;
-                    filterParts.push(`[${inIdx}:v]${this.buildClipSegmentChain(clip, bw, bh, ow, oh, segLabel)}`);
+                    filterParts.push(`[${inIdx}:v]${this.buildClipSegmentChain(clip, bw, bh, ow, oh, segLabel, {
+                        blurVeoWatermark: applyVeoBlur,
+                        iw,
+                        ih,
+                        veoTag: `u${unitIdx}s${segIdx}`
+                    })}`);
                 });
                 const { label: chainLabel } = this.buildChainedVideoStream(unit.clips, unitIdx, filterParts);
                 filterParts.push(`[${chainLabel}]setpts=PTS-STARTPTS+${t0}/TB[${clipLabel}]`);
@@ -494,7 +514,12 @@ class RenderService {
                     inputIndex += 1;
                     clip.inputIndex = inIdx;
                     visualInputIndices.push({ clip, inIdx });
-                    filterParts.push(`[${inIdx}:v]${this.buildSingleClipStreamChain(clip, bw, bh, ow, oh, t0, clipLabel)}`);
+                    filterParts.push(`[${inIdx}:v]${this.buildSingleClipStreamChain(clip, bw, bh, ow, oh, t0, clipLabel, {
+                        blurVeoWatermark: applyVeoBlur,
+                        iw,
+                        ih,
+                        veoTag: `u${unitIdx}`
+                    })}`);
                 }
             }
 
