@@ -9,7 +9,7 @@ import {
     Loader2,
 } from 'lucide-vue-next'
 import StoryboardMediaPreview from './StoryboardMediaPreview.vue'
-import { storyAspectToCss } from '@/utils/storyboardAspect.js'
+import { storyAspectToCss, isLandscapeStoryAspect, storyboardShotPreviewPanelWidth } from '@/utils/storyboardAspect.js'
 import { storyboardShotVideoPrompt, buildShotFrameImagePrompt, buildEnvironmentStyleContext } from '@/services/storyboardPromptBuilder.js'
 import {
     runStoryboardImageGen,
@@ -35,6 +35,8 @@ const { t } = useI18n()
 
 const imageAspect = computed(() => storyAspectToCss(props.settings.aspectRatio, 'image'))
 const videoAspect = computed(() => storyAspectToCss(props.settings.aspectRatio, 'video'))
+const isLandscapePreview = computed(() => isLandscapeStoryAspect(props.settings.aspectRatio))
+const previewPanelWidth = computed(() => storyboardShotPreviewPanelWidth(props.settings.aspectRatio))
 
 const environmentImageUrl = computed(() => {
     const url = props.scene.environmentImageTask?.result || props.scene.environmentImageUrl
@@ -130,9 +132,15 @@ const genVideo = async () => {
 
 <template>
     <article :id="`storyboard-shot-${scene.index}-${shot.index}`" class="shot-card">
-        <div class="shot-layout">
-            <div class="preview-panel">
-                <div class="preview-row">
+        <div
+            class="shot-layout"
+            :style="{ '--preview-panel-width': previewPanelWidth }"
+        >
+            <div
+                class="preview-panel"
+                :class="{ 'preview-panel--landscape': isLandscapePreview }"
+            >
+                <div class="preview-row" :class="{ 'preview-row--stacked': isLandscapePreview }">
                     <StoryboardMediaPreview
                         :task="shot.firstFrameTask"
                         media-type="image"
@@ -226,26 +234,37 @@ const genVideo = async () => {
 
 .shot-layout {
     display: grid;
-    grid-template-columns: minmax(280px, 420px) minmax(0, 1fr);
+    grid-template-columns: var(--preview-panel-width, 600px) minmax(0, 1fr);
     align-items: start;
     min-height: 170px;
 }
 
 .preview-panel {
+    width: 100%;
+    min-width: 0;
     border-right: 1px solid var(--color-border);
     background: var(--color-bg-soft);
     align-self: start;
 }
 
 .preview-row {
-    display: flex;
+    display: grid;
     gap: 8px;
     padding: 8px;
-    align-items: flex-start;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.preview-row:not(.preview-row--stacked) {
+    grid-template-columns: 1fr 1fr;
+}
+
+.preview-row--stacked {
+    grid-template-columns: 1fr;
 }
 
 .preview-row :deep(.media-preview) {
-    flex: 1 1 0;
+    width: 100%;
     min-width: 0;
     height: auto;
     align-self: flex-start;
@@ -394,9 +413,20 @@ const genVideo = async () => {
 @keyframes spin { to { transform: rotate(360deg); } }
 
 @media (max-width: 900px) {
-    .shot-layout { grid-template-columns: 1fr; }
-    .preview-panel { width: 100%; border-right: none; border-bottom: 1px solid var(--color-border); }
-    .preview-row { flex-direction: column; }
+    .shot-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .preview-panel {
+        width: 100%;
+        border-right: none;
+        border-bottom: 1px solid var(--color-border);
+    }
+
+    .preview-row:not(.preview-row--stacked) {
+        grid-template-columns: 1fr;
+    }
+
     .prompt-block .prompt-input:not(.prompt-input--sm) { min-height: 100px; resize: vertical; }
 }
 </style>

@@ -11,7 +11,7 @@ if (!fs.existsSync(STORAGE_PATH)) {
 }
 
 const DEFAULT_TEMPLATE_DEFAULTS = {
-    style: 'anime style, vibrant colors, clean outlines, soft cel shading, studio-quality anime frame',
+    style: 'cinematic illustration, cohesive visual style matching the selected style preset',
     character: 'Consistent main character — Character Bible across all scenes',
     scene: 'medium shot, clear location, props and pose',
     emotion: 'clear expression matching scene emotion',
@@ -28,7 +28,7 @@ const DEFAULT_SETTINGS = {
     duration: 60,
     language: 'VI',
     aspectRatio: '9:16',
-    stylePreset: 'Anime short',
+    stylePreset: 'Anime',
     imageModel: 'GEM_PIX_2',
     videoModel: 'veo3Fast',
     videoTier: 'ultra',

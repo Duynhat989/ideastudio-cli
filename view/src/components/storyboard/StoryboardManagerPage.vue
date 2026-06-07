@@ -12,9 +12,11 @@ import {
     Loader2,
     Clock,
     FolderOpen,
+    Users,
 } from 'lucide-vue-next'
 import { storyboardService } from '@/services/storyboard.service.js'
 import { notify } from '@/composables/useNotify.js'
+import StoryboardCharacterLibraryPopup from './StoryboardCharacterLibraryPopup.vue'
 
 const props = defineProps({
     currentProjectId: { type: String, default: '' },
@@ -33,6 +35,7 @@ const newProjectName = ref('')
 const newProjectDescription = ref('')
 const editingId = ref('')
 const editingName = ref('')
+const libraryOpen = ref(false)
 
 const loadProjects = async () => {
     loading.value = true
@@ -117,6 +120,23 @@ const removeProject = async (id) => {
 
 const sceneCount = (project) => (project.scenes || []).length
 
+const projectSummary = (project) => {
+    const text = project.description?.trim() || project.outline?.summary?.trim() || ''
+    return text
+}
+
+const formatProjectDate = (project) => {
+    const d = new Date(project.updatedAt || project.createdAt || 0)
+    if (Number.isNaN(d.getTime())) return ''
+    return d.toLocaleString('vi-VN', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+    })
+}
+
 onMounted(loadProjects)
 </script>
 
@@ -146,6 +166,10 @@ onMounted(loadProjects)
                 <option value="updated">{{ t('storyboard.sortUpdated') }}</option>
                 <option value="name">{{ t('storyboard.sortName') }}</option>
             </select>
+            <button type="button" class="sb-library-btn" @click="libraryOpen = true">
+                <Users :size="16" />
+                {{ t('storyboard.characterLibraryTitle') }}
+            </button>
             <button type="button" class="sb-create-btn" @click="openCreateModal">
                 <Plus :size="16" />
                 {{ t('storyboard.createProject') }}
@@ -172,40 +196,72 @@ onMounted(loadProjects)
                 v-for="project in filteredProjects"
                 :key="project.id"
                 class="sb-card"
-                :class="{ active: currentProjectId === project.id }"
+                :class="{ 'sb-card--active': currentProjectId === project.id }"
             >
-                <button type="button" class="sb-card-open" @click="emit('load', project.id)">
-                    <div class="sb-card-top">
-                        <Clapperboard :size="18" />
+                <div class="sb-card-accent" aria-hidden="true" />
+
+                <header class="sb-card-head">
+                    <div class="sb-card-brand">
+                        <span class="sb-card-icon"><Clapperboard :size="16" /></span>
                         <span class="sb-tag">StoryBoard</span>
+                        <span v-if="currentProjectId === project.id" class="sb-badge-open">{{ t('storyboard.projectOpen') }}</span>
                     </div>
+                    <div class="sb-card-actions">
+                        <button
+                            type="button"
+                            class="sb-action-btn"
+                            :title="t('storyboard.rename')"
+                            @click.stop="startRename(project)"
+                        >
+                            <Edit2 :size="14" />
+                        </button>
+                        <button
+                            type="button"
+                            class="sb-action-btn sb-action-btn--danger"
+                            :title="t('common.delete')"
+                            @click.stop="removeProject(project.id)"
+                        >
+                            <Trash2 :size="14" />
+                        </button>
+                    </div>
+                </header>
+
+                <button type="button" class="sb-card-body" @click="emit('load', project.id)">
                     <template v-if="editingId === project.id">
                         <div class="sb-rename" @click.stop>
-                            <input v-model="editingName" @keyup.enter="saveRename(project.id)" @keyup.esc="cancelRename" />
-                            <button type="button" @click="saveRename(project.id)"><Check :size="14" /></button>
-                            <button type="button" @click="cancelRename"><X :size="14" /></button>
+                            <input
+                                v-model="editingName"
+                                @keyup.enter="saveRename(project.id)"
+                                @keyup.esc="cancelRename"
+                            />
+                            <button type="button" class="sb-rename-btn" @click="saveRename(project.id)">
+                                <Check :size="14" />
+                            </button>
+                            <button type="button" class="sb-rename-btn" @click="cancelRename">
+                                <X :size="14" />
+                            </button>
                         </div>
                     </template>
                     <template v-else>
-                        <h3>{{ project.name }}</h3>
-                        <p v-if="project.description">{{ project.description }}</p>
-                        <p v-else-if="project.outline?.summary" class="muted">{{ project.outline.summary }}</p>
+                        <h3 class="sb-card-title">{{ project.name }}</h3>
+                        <p v-if="projectSummary(project)" class="sb-card-desc">{{ projectSummary(project) }}</p>
+                        <p v-else class="sb-card-desc sb-card-desc--empty">{{ t('storyboard.projectNoDescription') }}</p>
                     </template>
-                    <div class="sb-meta">
-                        <span><Clock :size="12" /> {{ new Date(project.updatedAt || project.createdAt).toLocaleString('vi-VN') }}</span>
-                        <span>{{ sceneCount(project) }} {{ t('storyboard.scenes') }}</span>
-                    </div>
                 </button>
-                <div class="sb-card-actions">
-                    <button type="button" :title="t('storyboard.rename')" @click="startRename(project)">
-                        <Edit2 :size="14" />
-                    </button>
-                    <button type="button" class="danger" :title="t('common.delete')" @click="removeProject(project.id)">
-                        <Trash2 :size="14" />
-                    </button>
-                </div>
+
+                <footer class="sb-card-foot">
+                    <span class="sb-chip">
+                        <Clock :size="12" />
+                        {{ formatProjectDate(project) }}
+                    </span>
+                    <span class="sb-chip sb-chip--scenes">
+                        {{ sceneCount(project) }} {{ t('storyboard.scenes') }}
+                    </span>
+                </footer>
             </article>
         </div>
+
+        <StoryboardCharacterLibraryPopup v-model:open="libraryOpen" />
 
         <Teleport to="body">
             <div v-if="createModalOpen" class="sb-modal-overlay" @click.self="createModalOpen = false">
@@ -344,6 +400,25 @@ onMounted(loadProjects)
     cursor: pointer;
 }
 
+.sb-library-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    padding: 8px 14px;
+    background: var(--color-bg-elevated);
+    color: var(--color-text);
+    font-weight: 600;
+    font-size: 0.84rem;
+    cursor: pointer;
+}
+
+.sb-library-btn:hover {
+    border-color: rgba(99, 102, 241, 0.45);
+    color: #a5b4fc;
+}
+
 .sb-state {
     min-height: 280px;
     display: flex;
@@ -359,85 +434,213 @@ onMounted(loadProjects)
 
 .sb-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-    gap: 10px;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 14px;
 }
 
 .sb-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    min-height: 196px;
     border: 1px solid var(--color-border);
-    border-radius: 14px;
+    border-radius: 16px;
     background: var(--color-bg-elevated);
     overflow: hidden;
-    display: grid;
-    grid-template-columns: 1fr auto;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
 
-.sb-card.active {
-    border-color: rgba(234, 179, 8, 0.5);
-    box-shadow: 0 0 0 1px rgba(234, 179, 8, 0.12);
+.sb-card:hover {
+    border-color: rgba(234, 179, 8, 0.35);
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
+    transform: translateY(-1px);
 }
 
-.sb-card-open {
-    border: none;
-    background: transparent;
-    text-align: left;
-    padding: 14px;
-    color: inherit;
-    cursor: pointer;
-    display: grid;
-    gap: 8px;
+.sb-card--active {
+    border-color: rgba(234, 179, 8, 0.55);
+    box-shadow: 0 0 0 1px rgba(234, 179, 8, 0.18), 0 12px 32px rgba(234, 179, 8, 0.08);
 }
 
-.sb-card-top {
+.sb-card-accent {
+    height: 3px;
+    background: linear-gradient(90deg, rgba(234, 179, 8, 0.15), var(--color-accent), rgba(234, 179, 8, 0.15));
+}
+
+.sb-card--active .sb-card-accent {
+    background: linear-gradient(90deg, #ca8a04, #facc15, #ca8a04);
+}
+
+.sb-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 12px 14px 0;
+}
+
+.sb-card-brand {
     display: flex;
     align-items: center;
     gap: 8px;
+    min-width: 0;
+}
+
+.sb-card-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    border: 1px solid rgba(234, 179, 8, 0.25);
+    background: var(--color-accent-soft);
     color: var(--color-accent);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
 }
 
 .sb-tag {
-    font-size: 0.68rem;
-    padding: 2px 8px;
+    font-size: 0.66rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 3px 8px;
     border-radius: 999px;
-    border: 1px solid rgba(234, 179, 8, 0.35);
-    background: var(--color-accent-soft);
+    border: 1px solid rgba(234, 179, 8, 0.28);
+    background: rgba(234, 179, 8, 0.08);
+    color: var(--color-accent);
 }
 
-.sb-card h3 {
-    margin: 0;
-    font-size: 0.95rem;
-}
-
-.sb-card p {
-    margin: 0;
-    font-size: 0.78rem;
-    color: var(--color-text-muted);
-    line-height: 1.4;
-}
-
-.sb-meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    font-size: 0.72rem;
-    color: var(--color-text-muted);
-}
-
-.sb-meta span {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
+.sb-badge-open {
+    font-size: 0.62rem;
+    font-weight: 700;
+    padding: 3px 7px;
+    border-radius: 999px;
+    background: rgba(234, 179, 8, 0.16);
+    color: #facc15;
+    border: 1px solid rgba(250, 204, 21, 0.35);
 }
 
 .sb-card-actions {
     display: flex;
-    flex-direction: column;
+    align-items: center;
     gap: 4px;
-    padding: 8px;
-    border-left: 1px solid var(--color-border);
+    flex-shrink: 0;
 }
 
-.sb-card-actions button {
+.sb-action-btn {
+    width: 30px;
+    height: 30px;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    background: var(--color-bg-soft);
+    color: var(--color-text-muted);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.sb-action-btn:hover {
+    color: var(--color-text);
+    border-color: rgba(255, 255, 255, 0.12);
+    background: var(--color-bg);
+}
+
+.sb-action-btn--danger:hover {
+    border-color: rgba(239, 68, 68, 0.45);
+    color: #fca5a5;
+    background: rgba(239, 68, 68, 0.08);
+}
+
+.sb-card-body {
+    flex: 1;
+    width: 100%;
+    border: none;
+    background: transparent;
+    text-align: left;
+    padding: 10px 14px 12px;
+    color: inherit;
+    cursor: pointer;
+    display: block;
+}
+
+.sb-card-title {
+    margin: 0 0 8px;
+    font-size: 1rem;
+    font-weight: 700;
+    line-height: 1.3;
+    letter-spacing: -0.01em;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.sb-card-desc {
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+    line-height: 1.55;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.sb-card-desc--empty {
+    font-style: italic;
+    opacity: 0.65;
+}
+
+.sb-card-foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 0 14px 14px;
+    margin-top: auto;
+}
+
+.sb-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 9px;
+    border-radius: 999px;
+    border: 1px solid var(--color-border);
+    background: var(--color-bg-soft);
+    font-size: 0.7rem;
+    color: var(--color-text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.sb-chip--scenes {
+    margin-left: auto;
+    font-weight: 600;
+    color: var(--color-text);
+    border-color: rgba(234, 179, 8, 0.22);
+    background: rgba(234, 179, 8, 0.06);
+}
+
+.sb-rename {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.sb-rename input {
+    flex: 1;
+    min-width: 0;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    background: var(--color-bg-soft);
+    color: var(--color-text);
+    padding: 8px 10px;
+    font-size: 0.84rem;
+}
+
+.sb-rename-btn {
     width: 32px;
     height: 32px;
     border: 1px solid var(--color-border);
@@ -445,30 +648,14 @@ onMounted(loadProjects)
     background: var(--color-bg-soft);
     color: var(--color-text-muted);
     cursor: pointer;
-    display: flex;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
+    flex-shrink: 0;
 }
 
-.sb-card-actions button.danger:hover {
-    border-color: rgba(239, 68, 68, 0.45);
-    color: #fca5a5;
-}
-
-.sb-rename {
-    display: flex;
-    gap: 4px;
-    align-items: center;
-}
-
-.sb-rename input {
-    flex: 1;
-    border: 1px solid var(--color-border);
-    border-radius: 8px;
-    background: var(--color-bg-soft);
+.sb-rename-btn:hover {
     color: var(--color-text);
-    padding: 6px 8px;
-    font-size: 0.82rem;
 }
 
 .sb-modal-overlay {

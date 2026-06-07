@@ -6,12 +6,14 @@ import {
     Upload,
     X,
     User,
+    Users,
     Loader2,
     Image as ImageIcon,
     Video,
     Trees,
     RefreshCw,
     Paintbrush,
+    Save,
 } from 'lucide-vue-next'
 import { callGeminiStructured, getSettings } from '@/services/nanoai.js'
 import {
@@ -20,8 +22,8 @@ import {
     GEMINI_STORYBOARD_SCENE_SHOTS_SCHEMA,
     GEMINI_CHARACTER_REF_PROMPT_SCHEMA,
 } from '@/services/storyboardSchemas.js'
-import { buildScenePrompt, buildEnvironmentImagePrompt, normalizeEnvironmentPrompt, buildEnvironmentStyleContext, getEnvironmentPromptTemplate, buildShotFrameImagePrompt, normalizeShotFrameImagePrompt, getShotFramePromptTemplate, buildCharacterRefImagePrompt, normalizeCharacterRefPrompt, getCharacterRefPromptTemplate, buildCharacterStyleContext } from '@/services/storyboardPromptBuilder.js'
-import { estimateSceneCount, parseDurationSec, storyAspectToCss } from '@/utils/storyboardAspect.js'
+import { buildScenePrompt, buildEnvironmentImagePrompt, normalizeEnvironmentPrompt, buildEnvironmentStyleContext, getEnvironmentPromptTemplate, buildShotFrameImagePrompt, normalizeShotFrameImagePrompt, getShotFramePromptTemplate, buildCharacterRefImagePrompt, normalizeCharacterRefPrompt, getCharacterRefPromptTemplate, buildCharacterStyleContext, resolveProjectStyle, getVideoBlocksJsonTemplate, applyProjectStyleToVideoBlocks } from '@/services/storyboardPromptBuilder.js'
+import { estimateSceneCount, parseDurationSec, STORYBOARD_CHARACTER_REF_ASPECT_CSS, storyboardCharacterRefPreviewWidth } from '@/utils/storyboardAspect.js'
 import { storyboardLanguagePromptLabel } from '@/utils/storyboardOptions.js'
 import {
     createMediaTask,
@@ -33,8 +35,11 @@ import {
 } from '@/composables/useStoryboardSceneGen.js'
 import StoryboardSceneSection from './StoryboardSceneSection.vue'
 import StoryboardMediaPreview from './StoryboardMediaPreview.vue'
+import StoryboardCharacterPickerPopup from './StoryboardCharacterPickerPopup.vue'
+import StoryboardCharacterFormPopup from './StoryboardCharacterFormPopup.vue'
 import { notify } from '@/composables/useNotify.js'
 import { storyboardService } from '@/services/storyboard.service.js'
+import { storyboardCharacterService } from '@/services/storyboardCharacter.service.js'
 import {
     persistStoryboardAsset,
     MAX_STORYBOARD_CHARACTERS,
@@ -71,6 +76,9 @@ const BULK_PARALLEL = 5
 
 const fileInputRef = ref(null)
 const styleFileInputRef = ref(null)
+const characterPickerOpen = ref(false)
+const saveCharacterOpen = ref(false)
+const saveCharacterDraft = ref(null)
 const activeSceneIndex = ref(null)
 let sceneNavObserver = null
 
@@ -143,8 +151,10 @@ const showCharacterStyleInput = ref(false)
 
 const defaultCharacterRefStyle = computed(() => {
     const td = props.templateDefaults
-    return [td.style, props.settings.stylePreset].filter(Boolean).join(', ')
-        || 'anime style, vibrant colors, clean outlines, soft cel shading, studio-quality anime frame'
+    return resolveProjectStyle({
+        stylePreset: props.settings.stylePreset,
+        visualStyle: [td.style, props.settings.stylePreset].filter(Boolean).join(', '),
+    }) || 'cinematic illustration'
 })
 
 const charStyleContext = () => {
@@ -194,6 +204,14 @@ const ensureUserCharacterImages = () => {
 
 ensureUserCharacterImages()
 
+const ensureLibraryCharacterRefs = () => {
+    if (!Array.isArray(props.editor.libraryCharacterRefs)) {
+        props.editor.libraryCharacterRefs = []
+    }
+}
+
+ensureLibraryCharacterRefs()
+
 const userCharacterPreviewUrls = computed(() => {
     ensureUserCharacterImages()
     return (props.editor.userCharacterImages || [])
@@ -202,12 +220,26 @@ const userCharacterPreviewUrls = computed(() => {
         .slice(0, MAX_STORYBOARD_CHARACTERS)
 })
 
-const characterCount = computed(() => userCharacterPreviewUrls.value.length)
+const libraryCharacterPreviewUrls = computed(() => {
+    ensureLibraryCharacterRefs()
+    return (props.editor.libraryCharacterRefs || [])
+        .map((ref) => storyboardCharacterService.assetUrl(ref.imageUrl))
+        .filter(Boolean)
+        .slice(0, MAX_STORYBOARD_CHARACTERS)
+})
+
+const characterCount = computed(() =>
+    userCharacterPreviewUrls.value.length + libraryCharacterPreviewUrls.value.length,
+)
 
 const canAddMoreCharacters = computed(() => characterCount.value < MAX_STORYBOARD_CHARACTERS)
 
 const characterRefUrls = computed(() => {
-    if (userCharacterPreviewUrls.value.length) return userCharacterPreviewUrls.value
+    const combined = [
+        ...userCharacterPreviewUrls.value,
+        ...libraryCharacterPreviewUrls.value,
+    ].slice(0, MAX_STORYBOARD_CHARACTERS)
+    if (combined.length) return combined
     ensureGeneratedCharacters()
     return props.editor.generatedCharacters
         .filter((char) => char.imageTask?.status === 'success' && char.imageTask?.result)
@@ -215,10 +247,29 @@ const characterRefUrls = computed(() => {
         .slice(0, MAX_STORYBOARD_CHARACTERS)
 })
 
+const outlineImageUrls = computed(() =>
+    [...userCharacterPreviewUrls.value, ...libraryCharacterPreviewUrls.value].slice(0, MAX_STORYBOARD_CHARACTERS),
+)
+
+const libraryCharacterBlock = () => {
+    ensureLibraryCharacterRefs()
+    const refs = props.editor.libraryCharacterRefs || []
+    if (!refs.length) return ''
+    const lines = refs.map((c, i) =>
+        `${i + 1}. ${c.name || 'Character'}${c.role ? ` (${c.role})` : ''}: ${c.description || '(no description)'}`,
+    ).join('\n')
+    return `
+NHÂN VẬT TỪ THƯ VIỆN (BẮT BUỘC — PHẢI dùng đúng name, description, role trong characters[] và characterBible):
+${lines}
+- KHÔNG đổi tên, ngoại hình hay vai trò các nhân vật trên trừ khi kịch bản không đề cập.
+- characterBible phải mô tả đồng bộ các nhân vật thư viện này.`
+}
+
 const needsCharacterGen = computed(() =>
     characterCount.value === 0 && generatedCharacterRows.value.length > 0,
 )
-const previewAspect = computed(() => storyAspectToCss(props.settings.aspectRatio, 'image'))
+const characterRefAspect = STORYBOARD_CHARACTER_REF_ASPECT_CSS
+const characterRefPreviewWidth = storyboardCharacterRefPreviewWidth()
 
 const totalShotCount = computed(() =>
     props.editor.scenes.reduce((sum, scene) => sum + (scene.shots?.length || 0), 0),
@@ -277,6 +328,18 @@ const buildRules = () => [
     'Only the character defined in the Audio tag may speak.',
 ]
 
+const projectStyleContext = () => envStyleContext()
+
+const projectStyleDirective = () => {
+    const ctx = projectStyleContext()
+    return [
+        `stylePreset (BẮT BUỘC): "${props.settings.stylePreset}"`,
+        `visualStyle (BẮT BUỘC — dạng "Tên style - Mô tả"): "${resolveProjectStyle(ctx)}"`,
+        `aspectRatio: "${props.settings.aspectRatio}"`,
+        'visualStyle PHẢI khớp đúng phong cách đã chọn — dùng format "Style Name - Description" từ stylePreset',
+    ].join('\n')
+}
+
 const buildOutlinePrompt = () => {
     const td = props.templateDefaults
     return `Bạn là chuyên gia viết kịch bản video AI điện ảnh.
@@ -286,26 +349,30 @@ BƯỚC 1 — PHÂN TÍCH & DÀN Ý:
 - Video gồm nhiều CẢNH (scene). Mỗi cảnh là một đơn vị địa điểm/hành động (vd: trò chuyện ở khu vườn).
 - KHÔNG viết shot hay prompt chi tiết ở bước này.
 
+PHONG CÁCH DỰ ÁN (dùng xuyên suốt mọi prompt sau này):
+${projectStyleDirective()}
+
 YÊU CẦU:
 - Ngôn ngữ thoại: ${storyboardLanguagePromptLabel(props.settings.language)}
 - Tổng thời lượng: ${durationSec.value} giây
-- Tỷ lệ: ${props.settings.aspectRatio}
-- Phong cách: ${props.settings.stylePreset}
+- Tỷ lệ khung hình: ${props.settings.aspectRatio}
 - Số cảnh: khoảng ${estimatedScenes.value} cảnh, mỗi cảnh 8-20 giây, tổng gần ${durationSec.value}s
 
 Ý TƯỞNG:
 ${props.editor.ideaText.trim()}
 
-Gợi ý template:
-- Style: ${td.style}
+Gợi ý template (tham khảo, KHÔNG ghi đè stylePreset):
 - Character: ${td.character}
 - Mood: ${td.mood}
+- Lighting: ${td.lighting}
+
+${libraryCharacterBlock()}
 
 ${characterCount.value
-    ? `Người dùng đã tải ${characterCount.value} ảnh nhân vật tham chiếu — characterBible và characters[] mô tả khớp từng nhân vật.`
+    ? `Người dùng đã cung cấp ${characterCount.value} nhân vật tham chiếu (ảnh tải lên hoặc thư viện) — characterBible và characters[] mô tả khớp từng nhân vật.`
     : `Chưa có ảnh nhân vật — PHÂN TÍCH kịch bản và liệt kê nhân vật chính trong characters[] (tối đa ${MAX_STORYBOARD_CHARACTERS} người có mặt trên màn hình). Mỗi nhân vật: name, description (tuổi, giới, tóc, mắt, trang phục), role. characterBible tóm tắt đồng bộ toàn bộ. Nếu chỉ có lời dẫn/VO không có nhân vật hình ảnh → characters = [].`}
 
-Trả JSON: title, summary, narrativeFlow, characterBible, characters[{name, description, role}], scenes[{index, label, durationSec, beat, location}].`;
+Trả JSON: title, summary, narrativeFlow, characterBible, characters[{name, description, role}], scenes[{index, label, durationSec, beat, location}].`
 }
 
 const buildCharacterRefPrompt = (characters = []) => {
@@ -313,7 +380,7 @@ const buildCharacterRefPrompt = (characters = []) => {
     const templateExample = getCharacterRefPromptTemplate(styleCtx)
     const styleRefCount = characterStyleRefUrls().length
     const styleRefLine = styleRefCount
-        ? `- Đã có ${styleRefCount} ảnh tham chiếu STYLE — STYLE section phải dùng style từ ảnh ref (tự động, không mô tả lại style bằng lời)`
+        ? `- Đã có ${styleRefCount} ảnh tham chiếu STYLE — đặt style.useStyleRefs = true, KHÔNG mô tả lại style bằng lời khác`
         : ''
     const charLines = characters.length
         ? characters.map((c, i) =>
@@ -321,7 +388,10 @@ const buildCharacterRefPrompt = (characters = []) => {
         ).join('\n')
         : `Tự suy luận từ Character Bible — tách từng nhân vật chính (tối đa ${MAX_STORYBOARD_CHARACTERS}).`
 
-    return `Dựa trên Character Bible và danh sách nhân vật, viết prompt tiếng Anh để TẠO ẢNH THAM CHIẾU RIÊNG cho từng nhân vật.
+    return `Viết prompt JSON (tiếng Anh) để TẠO ẢNH THAM CHIẾU NHÂN VẬT — mỗi nhân vật một object imagePrompt riêng.
+
+PHONG CÁCH DỰ ÁN:
+${projectStyleDirective()}
 
 Danh sách nhân vật (mỗi người = 1 ảnh riêng):
 ${charLines}
@@ -329,16 +399,19 @@ ${charLines}
 Character Bible:
 ${props.editor.outline?.characterBible || ''}
 
-Mẫu cấu trúc imagePrompt (tiếng Anh):
+Mẫu JSON imagePrompt (copy cấu trúc, điền nội dung):
 
 ${templateExample}
 
 Yêu cầu BẮT BUỘC:
 - MỖI nhân vật = MỘT phần tử trong mảng characters
 ${styleRefLine}
-- MỖI imagePrompt CHỈ mô tả ĐÚNG MỘT nhân vật — KHÔNG gộp 2+ người vào cùng prompt/ảnh
-- STYLE / POSE / BACKGROUND / CAMERA / LIGHTING / QUALITY: GIỮ NGUYÊN dòng cố định như mẫu
-- CHARACTER: chi tiết ngoại hình — tên, tuổi, giới, tóc, mắt, da, trang phục, phụ kiện, đặc điểm nhận dạng
+- imagePrompt là OBJECT JSON (không phải chuỗi text) — type = "character_reference"
+- style.preset và style.visualStyle PHẢI khớp phong cách dự án ở trên
+- style.visualStyle KHÔNG được mặc định anime nếu stylePreset khác anime
+- character: điền đủ name, age, gender, hair, eyes, skinTone, outfit, accessories, distinguishingFeatures
+- KHÔNG thêm pose/background/camera/lighting/quality — hệ thống tự gán cố định
+- MỖI imagePrompt CHỈ mô tả ĐÚNG MỘT nhân vật
 - Tối đa ${MAX_STORYBOARD_CHARACTERS} nhân vật
 - KHÔNG text, logo, watermark trên ảnh
 
@@ -353,17 +426,22 @@ const formatOutlineCharacterNames = () => {
 
 const buildSceneBatchPrompt = (batch) => {
     const td = props.templateDefaults
-    const templateExample = getEnvironmentPromptTemplate({
+    const styleCtx = {
         visualStyle: td.style,
         stylePreset: props.settings.stylePreset,
         lighting: td.lighting,
         mood: td.mood,
         environment: td.environment,
-    })
+        aspectRatio: props.settings.aspectRatio,
+    }
+    const templateExample = getEnvironmentPromptTemplate(styleCtx)
     const sceneLines = batch.map((s) =>
         `- Scene ${s.index}: ${s.label} | ${s.durationSec}s | ${s.location} | ${s.beat}`,
     ).join('\n')
-    return `Bạn đang chuẩn bị CẢNH cho storyboard video AI.
+    return `Chuẩn bị prompt JSON môi trường (background plate) cho từng cảnh storyboard.
+
+PHONG CÁCH DỰ ÁN:
+${projectStyleDirective()}
 
 DỰ ÁN: ${props.editor.outline?.title}
 Luồng kịch bản: ${props.editor.outline?.narrativeFlow || props.editor.outline?.summary}
@@ -371,80 +449,93 @@ Luồng kịch bản: ${props.editor.outline?.narrativeFlow || props.editor.outl
 Các cảnh cần làm giàu (tối đa ${SCENE_BATCH_SIZE} cảnh):
 ${sceneLines}
 
-Với MỖI cảnh, trả environmentPrompt theo ĐÚNG cấu trúc section sau (tiếng Anh):
+Với MỖI cảnh, trả environmentPrompt là OBJECT JSON (không phải chuỗi text):
 
 ${templateExample}
 
-QUY TẮC:
-- STYLE đầu tiên — khớp "${props.settings.stylePreset}" và "${td.style}"
-- SCENE TYPE / CAMERA / QUALITY: GIỮ NGUYÊN dòng cố định như mẫu — 1 khung dọc, KHÔNG multi-panel
-- ENVIRONMENT → OBJECTS → ATMOSPHERE: CHỈ cảnh trống, đạo cụ tĩnh — KHÔNG người, KHÔNG động vật
-- CẤM sinh vật sống, CẤM split screen / comic strip / storyboard sheet
+QUY TẮC JSON:
+- type = "environment_image"
+- style.preset và style.visualStyle PHẢI khớp phong cách dự án — KHÔNG mặc định anime
+- scene.location + scene.description: mô tả địa điểm cụ thể — CẢNH TRỐNG, không người, không động vật
+- scene.time, scene.weather, scene.objects[], scene.atmosphere: điền đầy đủ
+- lighting: ánh sáng phù hợp mood "${td.mood}"
+- KHÔNG thêm camera/quality/sceneType — hệ thống tự gán theo aspectRatio
+- Bố cục portrait: mô tả cảnh theo chiều dọc (trời trên, đất dưới) nếu aspectRatio = 9:16
+- CẤM sinh vật sống, CẤM split screen / comic strip
 
-- shotCount: số shot đề xuất trong cảnh — TỰ QUYẾT ĐỊNH từ ${MIN_SHOTS_PER_SCENE} đến ${MAX_SHOTS_PER_SCENE}
+shotCount: số shot đề xuất — tự quyết từ ${MIN_SHOTS_PER_SCENE} đến ${MAX_SHOTS_PER_SCENE}
 
-Trả JSON scenes[{index, environmentPrompt, shotCount}].`
+Trả JSON scenes[{index, environmentPrompt, shotCount}]`
 }
 
 const buildSceneShotsPrompt = (scene, prevBeat) => {
     const td = props.templateDefaults
-    const frameTemplate = getShotFramePromptTemplate({
-        visualStyle: td.style,
-        stylePreset: props.settings.stylePreset,
-    })
+    const styleCtx = projectStyleContext()
+    const frameTemplate = getShotFramePromptTemplate(styleCtx)
+    const videoBlocksTemplate = JSON.stringify(
+        getVideoBlocksJsonTemplate(styleCtx, td),
+        null,
+        2,
+    )
     const targetShots = scene.shotCount
         ? clampShotCount(scene.shotCount)
         : null
     const shotCountGuide = targetShots
         ? `Sinh đúng ${targetShots} shot cho cảnh này (có thể lệch ±1 nếu beat thực sự cần).`
-        : `Sinh từ ${MIN_SHOTS_PER_SCENE} đến ${MAX_SHOTS_PER_SCENE} shot — tự quyết định theo beat và thời lượng, KHÔNG cố định 2 shot.`
-    return `Viết TẤT CẢ SHOT trong 1 CẢNH storyboard.
+        : `Sinh từ ${MIN_SHOTS_PER_SCENE} đến ${MAX_SHOTS_PER_SCENE} shot — tự quyết định theo beat và thời lượng.`
+    return `Viết TẤT CẢ SHOT trong 1 CẢNH storyboard — output JSON có cấu trúc rõ ràng.
 
-CẤU TRÚC: Video → Cảnh (scene) → Nhiều Shot. Mỗi shot = 1 góc máy/khoảnh khắc ngắn trong cùng cảnh.
+PHONG CÁCH DỰ ÁN:
+${projectStyleDirective()}
+
+CẤU TRÚC: Video → Cảnh (scene) → Nhiều Shot. Mỗi shot = 1 góc máy/khoảnh khắc ngắn.
 
 DỰ ÁN:
 - Tiêu đề: ${props.editor.outline?.title}
 - Character Bible: ${props.editor.outline?.characterBible}
 - Nhân vật chính: ${formatOutlineCharacterNames()}
 - Ngôn ngữ thoại: ${storyboardLanguagePromptLabel(props.settings.language)}
-- Phong cách: ${props.settings.stylePreset}
 
 CẢNH:
 - ${scene.label} (index ${scene.index})
 - Địa điểm: ${scene.location}
 - Thời lượng: ${scene.durationSec}s
 - Beat: ${scene.beat}
-- Môi trường: ${scene.environmentPrompt}
+- Environment JSON: ${scene.environmentPrompt}
 ${prevBeat ? `- Cảnh trước: ${prevBeat}` : ''}
 
-Template:
-- Style: ${td.style}
-- Scene: ${td.scene}
-- Emotion: ${td.emotion}
-- Camera: ${td.camera}
-- Lighting: ${td.lighting}
-- Environment: ${td.environment}
-- Mood: ${td.mood}
-- ASMR: ${(td.asmr || []).join(', ')}
-- BGM: ${td.bgm}
-- Rules: ${buildRules().join(' | ')}
-
 YÊU CẦU MỖI SHOT:
-- imagePrompt (tiếng Anh): prompt tạo ảnh frame đầu — ĐÚNG cấu trúc section sau.
-  Frame đầu sẽ được gen bằng ảnh THAM CHIẾU: (1) ảnh khung cảnh/môi trường của cảnh, (2) ảnh nhân vật tham chiếu — prompt phải hướng model dùng các ref này, KHÔNG mô tả lại ngoại hình/background từ đầu.
 
+1) imagePrompt — OBJECT JSON (type = "shot_first_frame"), mẫu:
 ${frameTemplate}
 
-  * CHARACTER: nhắc dùng character reference image(s), chỉ mô tả pose/biểu cảm/vị trí trong khung
-  * ENVIRONMENT, LIGHTING, COMPOSITION, QUALITY: giữ nguyên dòng cố định như mẫu — dùng environment reference
-  * KHÔNG lời thoại, KHÔNG quote dialogue, KHÔNG speech bubble / text trong ảnh
-- blocks.character.name phải khớp đúng tên nhân vật trong danh sách nhân vật chính
-- blocks: 12 khối prompt cho VIDEO (STYLE, CHARACTER, SCENE, EMOTION, CAMERA, LIGHTING, ENVIRONMENT, MOOD, DIALOGUE, ASMR, BGM, RULES) — cấu trúc giống scene prompt hiện tại
-- durationSec: 3-8 giây mỗi shot, tổng thời lượng các shot gần ${scene.durationSec}s
-- ${shotCountGuide}
-- Tối thiểu ${MIN_SHOTS_PER_SCENE} shot, tối đa ${MAX_SHOTS_PER_SCENE} shot
+   - style.preset + style.visualStyle PHẢI khớp phong cách dự án
+   - character: CHỈ pose/expression/position/action — ngoại hình lấy từ character ref
+   - KHÔNG mô tả lại background — dùng environment reference image
+   - framing.aspectRatio = "${props.settings.aspectRatio}" — frame cuối PHẢI khớp tỷ lệ dự án
+   - TỶ LỆ & HÀI HÒA CẢNH-NHÂN VẬT (BẮT BUỘC):
+     + Nhân vật phải có scale, depth, perspective hài hòa với environment ref — không quá to/nhỏ, không trông như dán lên
+     + composition: mô tả cách nhân vật ngồi trong khung — cân bố cục với cảnh (rule of thirds khi phù hợp)
+     + camera: chọn góc quay, khoảng cách, loại shot (medium/wide/close-up) tối ưu cho tỷ lệ ${props.settings.aspectRatio}
+     + Có thể thay đổi góc quay/hướng khung hình để frame đẹp nhất — KHÔNG đổi ngoại hình nhân vật
+     + framing.harmonyNotes: ghi chú cụ thể cho shot này về cách cân bố cục nhân vật-cảnh
 
-Trả JSON shots[{index, label, durationSec, imagePrompt, blocks}] — số phần tử trong mảng tuân theo hướng dẫn số shot ở trên.`
+2) blocks — OBJECT JSON cho gen VIDEO, mẫu 12 khối:
+${videoBlocksTemplate}
+
+   - blocks.style.preset = "${props.settings.stylePreset}"
+   - blocks.style.visualStyle = "${resolveProjectStyle(styleCtx)}"
+   - blocks.character.name phải khớp tên nhân vật trong dự án
+   - blocks.scene.shot + blocks.camera: chọn góc quay/khoảng cách để nhân vật hài hòa với khung cảnh ở tỷ lệ ${props.settings.aspectRatio}
+   - blocks.audio.text: thoại bằng ${storyboardLanguagePromptLabel(props.settings.language)}
+   - blocks.rules: ${buildRules().join(' | ')}
+   - KHÔNG text/speech bubble trong mô tả hình ảnh
+
+- durationSec: 3-8 giây mỗi shot, tổng gần ${scene.durationSec}s
+- ${shotCountGuide}
+- Tối thiểu ${MIN_SHOTS_PER_SCENE}, tối đa ${MAX_SHOTS_PER_SCENE} shot
+
+Trả JSON shots[{index, label, durationSec, imagePrompt, blocks}]`
 }
 
 const triggerUpload = () => {
@@ -481,8 +572,70 @@ const onFileSelected = async (event) => {
 const removeImage = (index) => {
     ensureUserCharacterImages()
     props.editor.userCharacterImages.splice(index, 1)
-    if (!props.editor.userCharacterImages.length) {
+    if (!props.editor.userCharacterImages.length && !props.editor.libraryCharacterRefs?.length) {
         props.editor.characterRef.source = 'none'
+    }
+}
+
+const openCharacterPicker = () => {
+    if (!canAddMoreCharacters.value) {
+        notify.alert({
+            title: t('storyboard.characterLimitTitle'),
+            message: t('storyboard.characterLimitMessage', { max: MAX_STORYBOARD_CHARACTERS }),
+            variant: 'warning',
+        })
+        return
+    }
+    characterPickerOpen.value = true
+}
+
+const onLibraryCharactersPicked = (selected) => {
+    ensureLibraryCharacterRefs()
+    const maxLib = MAX_STORYBOARD_CHARACTERS - userCharacterPreviewUrls.value.length
+    props.editor.libraryCharacterRefs = selected.slice(0, maxLib).map((char) => ({
+        libraryId: char.id,
+        name: char.name || '',
+        description: char.description || '',
+        role: char.role || '',
+        imageUrl: char.imageUrl || null,
+        prompt: char.prompt || '',
+    }))
+    if (props.editor.libraryCharacterRefs.length) {
+        props.editor.characterRef.source = 'library'
+        props.editor.generatedCharacters = []
+    } else if (!props.editor.userCharacterImages?.length) {
+        props.editor.characterRef.source = 'none'
+    }
+}
+
+const removeLibraryCharacter = (index) => {
+    ensureLibraryCharacterRefs()
+    props.editor.libraryCharacterRefs.splice(index, 1)
+    if (!props.editor.libraryCharacterRefs.length && !props.editor.userCharacterImages?.length) {
+        props.editor.characterRef.source = 'none'
+    }
+}
+
+const outlineCharFor = (char) => outlineCharacters.value.find(
+    (c) => c.name && char.name && c.name.toLowerCase() === char.name.toLowerCase(),
+)
+
+const openSaveCharacter = (char) => {
+    const outlineChar = outlineCharFor(char)
+    saveCharacterDraft.value = {
+        char,
+        name: char.name || outlineChar?.name || '',
+        description: outlineChar?.description || '',
+        role: outlineChar?.role || '',
+        prompt: char.prompt || '',
+        imageSource: char.imageTask?.result || storyboardService.assetUrl(char.imageUrl),
+    }
+    saveCharacterOpen.value = true
+}
+
+const onCharacterSavedToLibrary = (saved) => {
+    if (saveCharacterDraft.value?.char) {
+        saveCharacterDraft.value.char.savedLibraryId = saved?.id || true
     }
 }
 
@@ -544,14 +697,16 @@ const envStyleContext = () => buildEnvironmentStyleContext({
 const shotFrameCtx = () => ({ styleContext: envStyleContext() })
 
 const applySceneShotsResult = (scene, shotsResult) => {
+    const styleCtx = envStyleContext()
     const rawShots = (shotsResult.shots || []).slice(0, MAX_SHOTS_PER_SCENE)
     scene.shots = rawShots.map((shot) => {
-        const videoPrompt = buildScenePrompt({ blocks: shot.blocks })
+        const blocks = applyProjectStyleToVideoBlocks(shot.blocks, styleCtx)
+        const videoPrompt = buildScenePrompt({ blocks })
         const imagePrompt = normalizeShotFrameImagePrompt(shot.imagePrompt, {
-            ...shotFrameCtx(),
-            blocks: shot.blocks,
+            styleContext: styleCtx,
+            blocks,
         })
-        return makeShotRow({ ...shot, imagePrompt }, videoPrompt)
+        return makeShotRow({ ...shot, blocks, imagePrompt }, videoPrompt)
     })
     if (!scene.shots.length) {
         scene.scriptStatus = 'error'
@@ -807,7 +962,7 @@ const generateStoryboard = async () => {
     props.editor.characterRef = {
         name: '',
         prompt: '',
-        source: characterCount.value ? 'upload' : 'none',
+        source: characterCount.value ? (props.editor.libraryCharacterRefs?.length ? 'library' : 'upload') : 'none',
         imageUrl: null,
         imageTask: createMediaTask(),
     }
@@ -816,13 +971,29 @@ const generateStoryboard = async () => {
         genProgress.value = { phase: 'outline', current: 0, total: 1, label: t('storyboard.phaseOutline') }
         const outlineResult = await callGeminiStructured(buildOutlinePrompt(), {
             responseSchema: GEMINI_STORYBOARD_OUTLINE_SCHEMA,
-            imageUrls: userCharacterPreviewUrls.value,
+            imageUrls: outlineImageUrls.value,
             maxOutputTokens: 4096,
         })
         if (!Array.isArray(outlineResult.characters)) outlineResult.characters = []
         outlineResult.characters = outlineResult.characters.slice(0, MAX_STORYBOARD_CHARACTERS)
         props.editor.outline = outlineResult
         props.editor.scenes = (outlineResult.scenes || []).map(makeSceneRow)
+
+        if (props.editor.libraryCharacterRefs?.length) {
+            props.editor.generatedCharacters = props.editor.libraryCharacterRefs.map((ref) => {
+                const row = makeGeneratedCharacterRow({
+                    name: ref.name,
+                    prompt: ref.prompt || '',
+                })
+                row.source = 'library'
+                if (ref.imageUrl) {
+                    row.imageUrl = ref.imageUrl
+                    row.imageTask.status = 'success'
+                    row.imageTask.result = storyboardCharacterService.assetUrl(ref.imageUrl)
+                }
+                return row
+            })
+        }
 
         if (characterCount.value === 0 && outlineResult.characters.length) {
             const charsForPrompt = outlineResult.characters.slice(0, MAX_STORYBOARD_CHARACTERS)
@@ -840,7 +1011,7 @@ const generateStoryboard = async () => {
                 .slice(0, MAX_STORYBOARD_CHARACTERS)
                 .map((char) => {
                     const row = makeGeneratedCharacterRow(char)
-                    row.prompt = normalizeCharacterRefPrompt(row.prompt, charStyleContext())
+                    row.prompt = normalizeCharacterRefPrompt(char.imagePrompt || row.prompt, charStyleContext())
                     return row
                 })
         }
@@ -1048,6 +1219,15 @@ defineExpose({
                         <Upload :size="14" />
                         {{ t('storyboard.uploadCharacter') }}
                     </button>
+                    <button
+                        type="button"
+                        class="btn-soft"
+                        :disabled="!canAddMoreCharacters"
+                        @click="openCharacterPicker"
+                    >
+                        <Users :size="14" />
+                        {{ t('storyboard.pickFromLibrary') }}
+                    </button>
                     <span class="char-count">{{ characterCount }}/{{ MAX_STORYBOARD_CHARACTERS }}</span>
                     <input
                         ref="fileInputRef"
@@ -1058,18 +1238,34 @@ defineExpose({
                         @change="onFileSelected"
                     />
                 </div>
-                <div v-if="userCharacterPreviewUrls.length" class="char-thumb-grid">
+                <div v-if="userCharacterPreviewUrls.length || editor.libraryCharacterRefs?.length" class="char-thumb-grid">
                     <div
                         v-for="(url, idx) in userCharacterPreviewUrls"
-                        :key="`${url}-${idx}`"
+                        :key="`upload-${url}-${idx}`"
                         class="char-thumb"
                     >
                         <img :src="url" alt="" />
                         <button type="button" class="remove-btn" @click="removeImage(idx)"><X :size="12" /></button>
                     </div>
+                    <div
+                        v-for="(ref, idx) in editor.libraryCharacterRefs"
+                        :key="`lib-${ref.libraryId}`"
+                        class="char-thumb char-thumb--library"
+                    >
+                        <img v-if="ref.imageUrl" :src="storyboardCharacterService.assetUrl(ref.imageUrl)" :alt="ref.name" />
+                        <span v-if="ref.name" class="char-thumb-label">{{ ref.name }}</span>
+                        <button type="button" class="remove-btn" @click="removeLibraryCharacter(idx)"><X :size="12" /></button>
+                    </div>
                 </div>
                 <small class="upload-hint">{{ t('storyboard.characterUploadHint', { max: MAX_STORYBOARD_CHARACTERS }) }}</small>
             </div>
+
+            <StoryboardCharacterPickerPopup
+                v-model:open="characterPickerOpen"
+                :max-select="MAX_STORYBOARD_CHARACTERS - userCharacterPreviewUrls.length"
+                :selected-ids="(editor.libraryCharacterRefs || []).map((r) => r.libraryId)"
+                @confirm="onLibraryCharactersPicked"
+            />
         </section>
 
         <section v-if="showScenes && editor.outline" class="result-panel">
@@ -1269,25 +1465,40 @@ defineExpose({
                     >
                         <header class="char-ref-item-head">
                             <strong>{{ char.name || t('storyboard.characterRefTitle') }}</strong>
-                            <button
-                                type="button"
-                                class="btn-soft btn-xs"
-                                :disabled="char.imageTask?.status === 'generating' || isCharacterRefGenBusy"
-                                @click="generateCharacterRefImage(char, charIndexInEditor(char))"
-                            >
-                                <Loader2 v-if="char.imageTask?.status === 'generating'" :size="12" class="spin" />
-                                <RefreshCw v-else :size="12" />
-                                {{ char.imageTask?.status === 'generating' ? t('storyboard.generating') : t('storyboard.genCharacterRef') }}
-                            </button>
+                            <div class="char-ref-item-actions">
+                                <button
+                                    v-if="char.imageTask?.status === 'success'"
+                                    type="button"
+                                    class="btn-soft btn-xs"
+                                    :class="{ 'btn-soft--saved': char.savedLibraryId }"
+                                    :disabled="Boolean(char.savedLibraryId)"
+                                    @click="openSaveCharacter(char)"
+                                >
+                                    <Save :size="12" />
+                                    {{ char.savedLibraryId ? t('storyboard.characterSaved') : t('storyboard.characterSaveToLibrary') }}
+                                </button>
+                                <button
+                                    type="button"
+                                    class="btn-soft btn-xs"
+                                    :disabled="char.imageTask?.status === 'generating' || isCharacterRefGenBusy"
+                                    @click="generateCharacterRefImage(char, charIndexInEditor(char))"
+                                >
+                                    <Loader2 v-if="char.imageTask?.status === 'generating'" :size="12" class="spin" />
+                                    <RefreshCw v-else :size="12" />
+                                    {{ char.imageTask?.status === 'generating' ? t('storyboard.generating') : t('storyboard.genCharacterRef') }}
+                                </button>
+                            </div>
                         </header>
-                        <div class="char-ref-body">
-                            <StoryboardMediaPreview
-                                :task="char.imageTask"
-                                media-type="image"
-                                :aspect-ratio="previewAspect"
-                                :label="char.name || t('storyboard.characterRefTitle')"
-                                @download="downloadMediaResult(char.imageTask, `character-${idx + 1}.png`)"
-                            />
+                        <div class="char-ref-body" :style="{ '--char-ref-preview-width': characterRefPreviewWidth }">
+                            <div class="char-ref-preview-col">
+                                <StoryboardMediaPreview
+                                    :task="char.imageTask"
+                                    media-type="image"
+                                    :aspect-ratio="characterRefAspect"
+                                    :label="char.name || t('storyboard.characterRefTitle')"
+                                    @download="downloadMediaResult(char.imageTask, `character-${idx + 1}.png`)"
+                                />
+                            </div>
                             <textarea
                                 :value="char.prompt"
                                 class="sb-textarea sb-textarea--readonly sb-textarea--mono sb-scroll ref-prompt"
@@ -1349,6 +1560,19 @@ defineExpose({
                 {{ t('storyboard.openSetup') }}
             </button>
         </section>
+
+        <StoryboardCharacterFormPopup
+            v-if="saveCharacterDraft"
+            v-model:open="saveCharacterOpen"
+            mode="save"
+            :initial-name="saveCharacterDraft.name"
+            :initial-description="saveCharacterDraft.description"
+            :initial-role="saveCharacterDraft.role"
+            :initial-prompt="saveCharacterDraft.prompt"
+            :initial-style-preset="settings.stylePreset"
+            :image-source="saveCharacterDraft.imageSource"
+            @saved="onCharacterSavedToLibrary"
+        />
     </div>
 </template>
 
@@ -1474,6 +1698,26 @@ defineExpose({
     width: 100%;
     height: 100%;
     object-fit: cover;
+}
+
+.char-thumb--library {
+    border-color: rgba(99, 102, 241, 0.45);
+}
+
+.char-thumb-label {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: 2px 4px;
+    font-size: 0.58rem;
+    font-weight: 600;
+    text-align: center;
+    background: linear-gradient(transparent, rgba(0, 0, 0, 0.75));
+    color: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .remove-btn {
@@ -1716,6 +1960,19 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
     gap: 10px;
 }
 
+.char-ref-item-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.btn-soft--saved {
+    opacity: 0.65;
+    border-color: rgba(34, 197, 94, 0.35);
+    color: #86efac;
+}
+
 .char-ref-item-head strong {
     font-size: 0.88rem;
     min-width: 0;
@@ -1733,10 +1990,19 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .char-ref-body {
     display: grid;
-    grid-template-columns: minmax(128px, 148px) minmax(0, 1fr);
+    grid-template-columns: var(--char-ref-preview-width, 132px) minmax(0, 1fr);
     gap: 12px;
-    align-items: stretch;
-    min-height: 210px;
+    align-items: start;
+}
+
+.char-ref-preview-col {
+    width: var(--char-ref-preview-width, 132px);
+    max-width: var(--char-ref-preview-width, 132px);
+    flex-shrink: 0;
+}
+
+.char-ref-preview-col :deep(.media-preview) {
+    width: 100%;
 }
 
 .ref-prompt {

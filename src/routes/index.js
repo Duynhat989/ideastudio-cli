@@ -36,6 +36,7 @@ API_HOST.use(bodyParser.urlencoded({ limit: '500mb', extended: true }));
 // Services
 const project = require('../services/project.service')
 const storyboard = require('../services/storyboard.service')
+const storyboardCharacter = require('../services/storyboard-character.service')
 const metaService = require('../services/meta.service')
 const renderService = require('../services/render.service')
 
@@ -129,6 +130,49 @@ API_HOST.post('/api/storyboards/:id/assets/upload', (req, res) => {
             return res.status(400).json({ success: false, message: err.message || 'Upload lỗi' })
         }
         storyboard.saveAssetUpload(req, res)
+    })
+})
+
+const CHARACTERS_STORAGE_PATH = path.join(STORYBOARD_STORAGE_PATH, 'characters')
+const characterUploadStorage = multer.diskStorage({
+    destination(_req, _file, cb) {
+        try {
+            fs.mkdirSync(CHARACTERS_STORAGE_PATH, { recursive: true })
+            cb(null, CHARACTERS_STORAGE_PATH)
+        } catch (e) {
+            cb(e)
+        }
+    },
+    filename(_req, file, cb) {
+        const rawExt = path.extname(file.originalname || '')
+        const ext = rawExt && rawExt.length <= 10 ? rawExt.toLowerCase() : '.png'
+        cb(null, `upload-${Date.now()}-${crypto.randomBytes(6).toString('hex')}${ext}`)
+    },
+})
+const characterUpload = multer({
+    storage: characterUploadStorage,
+    limits: { fileSize: 32 * 1024 * 1024 },
+})
+
+API_HOST.get('/api/storyboard-characters', storyboardCharacter.list.bind(storyboardCharacter))
+API_HOST.get('/api/storyboard-characters/:id', storyboardCharacter.getOne.bind(storyboardCharacter))
+API_HOST.post('/api/storyboard-characters', storyboardCharacter.create.bind(storyboardCharacter))
+API_HOST.post('/api/storyboard-characters/upload', (req, res) => {
+    characterUpload.single('file')(req, res, (err) => {
+        if (err) {
+            return res.status(400).json({ success: false, message: err.message || 'Upload lỗi' })
+        }
+        storyboardCharacter.createWithUpload(req, res)
+    })
+})
+API_HOST.put('/api/storyboard-characters/:id', storyboardCharacter.update.bind(storyboardCharacter))
+API_HOST.delete('/api/storyboard-characters/:id', storyboardCharacter.delete.bind(storyboardCharacter))
+API_HOST.post('/api/storyboard-characters/:id/image', (req, res) => {
+    characterUpload.single('file')(req, res, (err) => {
+        if (err) {
+            return res.status(400).json({ success: false, message: err.message || 'Upload lỗi' })
+        }
+        storyboardCharacter.saveImageUpload(req, res)
     })
 })
 

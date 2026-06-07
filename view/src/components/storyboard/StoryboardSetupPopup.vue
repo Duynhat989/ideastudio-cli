@@ -36,7 +36,7 @@ import {
     videoModelsForTier,
     normalizeVideoTier,
 } from '@/services/flowApiV3.js'
-import { STORYBOARD_LANGUAGE_OPTIONS, STORYBOARD_STYLE_PRESETS } from '@/utils/storyboardOptions.js'
+import { STORYBOARD_LANGUAGE_OPTIONS, STORYBOARD_STYLE_PRESETS, getStoryboardStylePreset } from '@/utils/storyboardOptions.js'
 
 const open = defineModel('open', { type: Boolean, default: false })
 const minimized = defineModel('minimized', { type: Boolean, default: false })
@@ -87,6 +87,10 @@ const videoTierLabel = computed(() => {
 const languageOptions = STORYBOARD_LANGUAGE_OPTIONS
 const aspectOptions = ['9:16', '16:9', '1:1']
 const stylePresets = STORYBOARD_STYLE_PRESETS
+
+const selectedStyleDescription = computed(() =>
+    getStoryboardStylePreset(props.editor.settings?.stylePreset)?.description || '',
+)
 
 const activeTab = computed({
     get: () => props.editor.activeTab,
@@ -213,8 +217,16 @@ const updateArrayField = (key, raw) => {
                                     <label class="field">
                                         <span><Palette :size="13" /> {{ t('storyboard.stylePreset') }}</span>
                                         <select v-model="editor.settings.stylePreset">
-                                            <option v-for="opt in stylePresets" :key="opt" :value="opt">{{ opt }}</option>
+                                            <option
+                                                v-for="opt in stylePresets"
+                                                :key="opt.value"
+                                                :value="opt.value"
+                                                :title="opt.description"
+                                            >
+                                                {{ opt.value }}
+                                            </option>
                                         </select>
+                                        <small v-if="selectedStyleDescription" class="field-note">{{ selectedStyleDescription }}</small>
                                     </label>
                                     <label class="field">
                                         <span><ImageIcon :size="13" /> {{ t('storyboard.imageModel') }}</span>

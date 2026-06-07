@@ -2,6 +2,7 @@
 import { computed, ref, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Sidebar from './components/Sidebar.vue'
+import Welcome from './pages/Welcome.vue'
 import FlowAI from './pages/FlowAI.vue'
 import StoryBoard from './pages/StoryBoard.vue'
 import GenImage from './pages/GenImage.vue'
@@ -31,6 +32,7 @@ const VEO_REQUIRED_PAGES = ['Workflow Video', 'Gen Video']
 
 const pageMap = {
 	'Auth': AuthView,
+	'Welcome': Welcome,
 	// 'Motion Video': IdolAI, // tạm tắt
 	'Gen Image': GenImage,
 	'Gen Video': GenVideo,
@@ -61,8 +63,7 @@ const onLoginSuccess = (payload) => {
 		currentBalance.value = payload.balance
 		currentBalanceNow.value = payload.balance
 	}
-	currentPage.value = 'Workflow Video'
-	workflowOpenTrigger.value += 1
+	currentPage.value = 'Welcome'
 	if (!hasVeo3VideoConfigured()) {
 		showVeoSetupModal.value = true
 	}
@@ -203,7 +204,7 @@ onMounted(() => {
 				@logout="onLogout"
 			/>
 			<main class="app-main">
-				<component :is="currentView" :key="currentViewKey" v-bind="currentViewProps" />
+				<component :is="currentView" :key="currentViewKey" v-bind="currentViewProps" @navigate="onSelectPage" />
 			</main>
 		</div>
 

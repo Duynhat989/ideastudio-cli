@@ -14,8 +14,8 @@ import {
 } from 'lucide-vue-next'
 import StoryboardShotCard from './StoryboardShotCard.vue'
 import StoryboardMediaPreview from './StoryboardMediaPreview.vue'
-import { storyAspectToCss } from '@/utils/storyboardAspect.js'
-import { buildEnvironmentImagePrompt, buildEnvironmentStyleContext, normalizeEnvironmentPrompt } from '@/services/storyboardPromptBuilder.js'
+import { storyAspectToCss, storyboardPreviewColWidth, isLandscapeStoryAspect } from '@/utils/storyboardAspect.js'
+import { buildEnvironmentImagePrompt, buildEnvironmentStyleContext, normalizeEnvironmentPrompt, getEnvironmentPromptTemplate } from '@/services/storyboardPromptBuilder.js'
 import { runStoryboardImageGen } from '@/composables/useStoryboardSceneGen.js'
 import { persistStoryboardAsset } from '@/utils/storyboardProject.js'
 import { storyboardService } from '@/services/storyboard.service.js'
@@ -35,6 +35,8 @@ const emit = defineEmits(['toggle', 'regenerate-shots'])
 const { t } = useI18n()
 
 const imageAspect = computed(() => storyAspectToCss(props.settings.aspectRatio, 'image'))
+const isLandscapePreview = computed(() => isLandscapeStoryAspect(props.settings.aspectRatio))
+const envPreviewWidth = computed(() => storyboardPreviewColWidth(props.settings.aspectRatio))
 const shotCount = computed(() => props.scene.shots?.length || 0)
 
 const sceneStatus = computed(() => {
@@ -59,6 +61,10 @@ const envStyleContext = computed(() => buildEnvironmentStyleContext({
     settings: props.settings,
     templateDefaults: props.templateDefaults,
 }))
+
+const environmentPromptPlaceholder = computed(() =>
+    getEnvironmentPromptTemplate(envStyleContext.value),
+)
 
 const genEnvironment = async () => {
     if (!props.scene.environmentPrompt?.trim() || props.scene.environmentImageTask?.status === 'generating') return
@@ -123,8 +129,8 @@ const genEnvironment = async () => {
         </header>
 
         <div v-show="expanded" class="scene-body">
-            <article v-if="scene.environmentPrompt" class="env-block">
-                <div class="env-preview-col">
+            <article v-if="scene.environmentPrompt" class="env-block" :style="{ '--env-preview-width': envPreviewWidth }">
+                <div class="env-preview-col" :class="{ 'env-preview-col--landscape': isLandscapePreview }">
                     <StoryboardMediaPreview
                         :task="scene.environmentImageTask"
                         media-type="image"
@@ -151,7 +157,8 @@ const genEnvironment = async () => {
                     <textarea
                         v-model="scene.environmentPrompt"
                         class="env-textarea sb-textarea sb-textarea--env sb-textarea--mono sb-scroll"
-                        :placeholder="t('storyboard.environmentPromptPlaceholder')"
+                        rows="12"
+                        :placeholder="environmentPromptPlaceholder"
                     />
 
                     <div class="env-editor-foot">
@@ -355,10 +362,10 @@ const genEnvironment = async () => {
     gap: 14px;
 }
 
-/* ── Environment: 300px preview + fill textarea ── */
+/* ── Environment: aspect-aware preview + fill textarea ── */
 .env-block {
     display: grid;
-    grid-template-columns: 300px minmax(0, 1fr);
+    grid-template-columns: var(--env-preview-width, 300px) minmax(0, 1fr);
     gap: 14px;
     align-items: start;
     padding: 10px;
@@ -368,9 +375,13 @@ const genEnvironment = async () => {
 }
 
 .env-preview-col {
-    width: 300px;
-    max-width: 300px;
+    width: var(--env-preview-width, 300px);
+    max-width: var(--env-preview-width, 300px);
     align-self: start;
+}
+
+.env-preview-col--landscape {
+    min-width: 0;
 }
 
 .env-preview-col :deep(.media-preview) {
@@ -591,6 +602,10 @@ const genEnvironment = async () => {
     .env-preview-col {
         width: 100%;
         max-width: none;
+    }
+
+    .env-block {
+        --env-preview-width: 100%;
     }
 
     .env-editor-col {

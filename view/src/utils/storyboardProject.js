@@ -2,6 +2,7 @@ import { createMediaTask } from '@/composables/useStoryboardSceneGen.js';
 import { storyboardService } from '@/services/storyboard.service.js';
 import { getSettings } from '@/services/nanoai.js';
 import { normalizeVideoModel, normalizeVideoTier } from '@/services/flowApiV3.js';
+import { normalizeStoryboardStylePreset } from '@/utils/storyboardOptions.js';
 
 export const MAX_STORYBOARD_CHARACTERS = 4;
 export const MAX_CHARACTER_STYLE_REFS = 4;
@@ -21,12 +22,12 @@ export function defaultEditorState(overrides = {}) {
             duration: 60,
             language: 'VI',
             aspectRatio: '9:16',
-            stylePreset: 'Anime short',
+            stylePreset: 'Anime',
             imageModel: 'GEM_PIX_2',
             videoModel: 'veo3Fast',
         }),
         templateDefaults: {
-            style: 'anime style, vibrant colors, clean outlines, soft cel shading, studio-quality anime frame',
+            style: 'cinematic illustration, cohesive visual style matching the selected style preset',
             character: 'Định nghĩa nhân vật chính nhất quán — Character Bible xuyên suốt video',
             scene: 'medium shot, rõ địa điểm, đạo cụ và tư thế nhân vật',
             emotion: 'biểu cảm rõ ràng, phù hợp cảm xúc từng cảnh',
@@ -47,6 +48,7 @@ export function defaultEditorState(overrides = {}) {
         characterRefStyleRefs: [],
         generatedCharacters: [],
         userCharacterImages: [],
+        libraryCharacterRefs: [],
         expandedScenes: {},
         ...overrides,
     };
@@ -251,9 +253,13 @@ export function serializeGeneratedCharacter(char) {
 }
 
 export function makeGeneratedCharacterRow(char = {}) {
+    const rawPrompt = char.imagePrompt ?? char.prompt ?? '';
+    const prompt = typeof rawPrompt === 'object' && rawPrompt
+        ? JSON.stringify(rawPrompt, null, 2)
+        : String(rawPrompt || '');
     return hydrateGeneratedCharacter({
         name: char.characterName || char.name || '',
-        prompt: char.imagePrompt || char.prompt || '',
+        prompt,
         source: 'none',
         imageUrl: null,
     });
@@ -310,6 +316,18 @@ export function extractRelativeAssetPath(url) {
     return match ? match[0] : null;
 }
 
+export function normalizeLibraryCharacterRef(ref) {
+    if (!ref?.libraryId) return null;
+    return {
+        libraryId: String(ref.libraryId),
+        name: String(ref.name || '').trim(),
+        description: String(ref.description || '').trim(),
+        role: String(ref.role || '').trim(),
+        imageUrl: ref.imageUrl || null,
+        prompt: typeof ref.prompt === 'string' ? ref.prompt : '',
+    };
+}
+
 export function configToEditorState(config) {
     const base = defaultEditorState();
     if (!config) return base;
@@ -319,6 +337,7 @@ export function configToEditorState(config) {
         if (typeof merged.duration === 'string') {
             merged.duration = parseInt(merged.duration, 10) || 60;
         }
+        merged.stylePreset = normalizeStoryboardStylePreset(merged.stylePreset);
         base.settings = applyVeoSettingsFromApp(merged);
     }
     if (config.templateDefaults) base.templateDefaults = { ...base.templateDefaults, ...config.templateDefaults };
@@ -332,6 +351,14 @@ export function configToEditorState(config) {
         base.userCharacterImages = [...config.userCharacterImages];
     } else if (config.userCharacterImageUrl) {
         base.userCharacterImages = [config.userCharacterImageUrl];
+    }
+    if (Array.isArray(config.libraryCharacterRefs) && config.libraryCharacterRefs.length) {
+        base.libraryCharacterRefs = config.libraryCharacterRefs
+            .map(normalizeLibraryCharacterRef)
+            .filter(Boolean)
+            .slice(0, MAX_STORYBOARD_CHARACTERS);
+    } else {
+        base.libraryCharacterRefs = [];
     }
     base.expandedScenes = config.expandedScenes || {};
     base.characterRefStyle = typeof config.characterRefStyle === 'string' ? config.characterRefStyle : '';
@@ -375,6 +402,10 @@ export function editorStateToConfig(editor, meta = {}) {
             imageUrl: charRefImageUrl,
         },
         userCharacterImages: charImageUrls,
+        libraryCharacterRefs: (editor.libraryCharacterRefs || [])
+            .map(normalizeLibraryCharacterRef)
+            .filter(Boolean)
+            .slice(0, MAX_STORYBOARD_CHARACTERS),
         expandedScenes: editor.expandedScenes || {},
         characterRefStyle: String(editor.characterRefStyle || '').trim(),
         characterRefStyleRefs: (editor.characterRefStyleRefs || [])

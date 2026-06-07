@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
+    Home,
     GitCompareArrows,
     Clapperboard,
     Image,
@@ -31,10 +32,11 @@ const emit = defineEmits(['select-item', 'logout'])
 const { t } = useI18n()
 
 const menuItems = [
-    { id: 'Gen Image', icon: Image, labelKey: 'nav.genImage' },
-    { id: 'Gen Video', icon: Video, labelKey: 'nav.genVideo' },
+    { id: 'Welcome', icon: Home, labelKey: 'nav.welcome' },
     { id: 'Workflow Video', icon: GitCompareArrows, labelKey: 'nav.workflowVideo' },
     { id: 'StoryBoard', icon: Clapperboard, labelKey: 'nav.storyBoard' },
+    { id: 'Gen Image', icon: Image, labelKey: 'nav.genImage' },
+    { id: 'Gen Video', icon: Video, labelKey: 'nav.genVideo' },
     { id: 'Setup', icon: Settings, labelKey: 'nav.setup' },
 ]
 
@@ -96,36 +98,28 @@ const formatBalance = (n) => {
                         <p class="brand-caption">{{ t('nav.creativeWorkspace') }}</p>
                         <p class="brand-balance">
                             <span class="balance-label">{{ t('common.balance') }}</span>
-                            <span class="balance-value">{{ formatBalance(currentBalance) }}{{ t('common.currencySuffix') }}</span>
+                            <span class="balance-value">{{ formatBalance(currentBalance) }}{{ t('common.currencySuffix')
+                                }}</span>
                         </p>
                     </div>
-                    <button
-                        v-if="isWideScreen"
-                        type="button"
-                        class="collapse-toggle"
+                    <button v-if="isWideScreen" type="button" class="collapse-toggle"
                         :title="isCollapsed ? t('nav.expandSidebar') : t('nav.collapseSidebar')"
-                        :aria-expanded="!isCollapsed"
-                        @click="toggleCollapse"
-                    >
+                        :aria-expanded="!isCollapsed" @click="toggleCollapse">
                         <ChevronLeft v-if="!isCollapsed" :size="18" stroke-width="2" />
                         <ChevronRight v-else :size="18" stroke-width="2" />
                     </button>
                 </div>
-                <p v-if="narrowRail" class="rail-balance" :title="`${t('common.balance')}: ${formatBalance(currentBalance)}${t('common.currencySuffix')}`">
+                <p v-if="narrowRail" class="rail-balance"
+                    :title="`${t('common.balance')}: ${formatBalance(currentBalance)}${t('common.currencySuffix')}`">
                     {{ formatBalance(currentBalance) }}
                 </p>
             </header>
 
             <nav class="menu-list" aria-label="Main menu">
-                <button
-                    v-for="item in menuItems"
-                    :key="item.id"
-                    type="button"
+                <button v-for="item in menuItems" :key="item.id" type="button"
                     :class="['menu-item', { active: item.id === activeItem }]"
                     :title="narrowRail ? t(item.labelKey) : undefined"
-                    :aria-current="item.id === activeItem ? 'page' : undefined"
-                    @click="selectItem(item.id)"
-                >
+                    :aria-current="item.id === activeItem ? 'page' : undefined" @click="selectItem(item.id)">
                     <component :is="item.icon" :size="18" class="menu-icon" aria-hidden="true" />
                     <span v-if="!narrowRail" class="menu-label">{{ t(item.labelKey) }}</span>
                 </button>
@@ -133,21 +127,13 @@ const formatBalance = (n) => {
 
             <footer class="sidebar-footer">
                 <div class="footer-actions">
-                    <button
-                        type="button"
-                        class="menu-item about-btn"
-                        :title="narrowRail ? t('nav.aboutUs') : undefined"
-                        @click="openAbout"
-                    >
+                    <button type="button" class="menu-item about-btn" :title="narrowRail ? t('nav.aboutUs') : undefined"
+                        @click="openAbout">
                         <Info :size="18" class="menu-icon" aria-hidden="true" />
                         <span v-if="!narrowRail" class="menu-label">{{ t('nav.aboutUs') }}</span>
                     </button>
-                    <button
-                        type="button"
-                        class="menu-item logout-btn"
-                        :title="narrowRail ? t('nav.logout') : undefined"
-                        @click="requestLogout"
-                    >
+                    <button type="button" class="menu-item logout-btn" :title="narrowRail ? t('nav.logout') : undefined"
+                        @click="requestLogout">
                         <LogOut :size="18" class="menu-icon" aria-hidden="true" />
                         <span v-if="!narrowRail" class="menu-label">{{ t('nav.logout') }}</span>
                     </button>
@@ -156,14 +142,8 @@ const formatBalance = (n) => {
         </div>
 
         <Teleport to="body">
-            <div
-                v-if="aboutOpen"
-                class="about-overlay"
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="about-title"
-                @click.self="closeAbout"
-            >
+            <div v-if="aboutOpen" class="about-overlay" role="dialog" aria-modal="true" aria-labelledby="about-title"
+                @click.self="closeAbout">
                 <div class="about-panel" @click.stop>
                     <button type="button" class="about-close" :aria-label="t('common.close')" @click="closeAbout">
                         <X :size="18" />
@@ -273,14 +253,12 @@ const formatBalance = (n) => {
     letter-spacing: -0.03em;
     line-height: 1.12;
     text-rendering: geometricPrecision;
-    background: linear-gradient(
-        118deg,
-        #ffffff 0%,
-        #f4f4f5 28%,
-        #e4e4e7 52%,
-        #eab308 78%,
-        #fef08a 100%
-    );
+    background: linear-gradient(118deg,
+            #ffffff 0%,
+            #f4f4f5 28%,
+            #e4e4e7 52%,
+            #eab308 78%,
+            #fef08a 100%);
     background-size: 140% 100%;
     -webkit-background-clip: text;
     background-clip: text;
@@ -404,9 +382,11 @@ const formatBalance = (n) => {
         background 0.18s ease,
         box-shadow 0.18s ease;
 }
+
 .sidebar.is-collapsed .menu-item {
     justify-content: center;
 }
+
 .menu-item:hover {
     color: var(--color-text);
     border-color: var(--color-border);
@@ -545,6 +525,7 @@ const formatBalance = (n) => {
 }
 
 @media (max-width: 960px) {
+
     .sidebar,
     .sidebar.is-collapsed {
         width: 100%;
