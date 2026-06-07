@@ -61,20 +61,38 @@ function mediaTaskFromUrl(url) {
     return task;
 }
 
+/** Media gen cannot resume after reload — treat stale in-flight state as idle. */
+function resetStaleMediaStatus(status, { url = null } = {}) {
+    if (url) return status === 'error' ? 'error' : 'success';
+    if (status === 'generating') return 'idle';
+    return status || 'idle';
+}
+
+/** Script/shot AI gen interrupted — keep completed work, otherwise reset. */
+function resetStaleScriptStatus(status, { shots = [] } = {}) {
+    if (status !== 'generating') return status || 'pending';
+    return shots.length ? 'done' : 'pending';
+}
+
 function taskUrlFromScene(fieldUrl, task, statusField) {
     const url = fieldUrl
         || (task?.result && !String(task.result).startsWith('blob:')
             ? extractRelativeAssetPath(task.result)
             : null);
-    return { url, status: task?.status || (url ? 'success' : statusField || 'idle') };
+    const rawStatus = task?.status || (url ? 'success' : statusField || 'idle');
+    return { url, status: resetStaleMediaStatus(rawStatus, { url }) };
 }
 
 export function hydrateShot(shot) {
     const firstFrameTask = mediaTaskFromUrl(shot.firstFrameImageUrl);
-    if (shot.firstFrameStatus && !shot.firstFrameImageUrl) firstFrameTask.status = shot.firstFrameStatus;
+    if (shot.firstFrameStatus && !shot.firstFrameImageUrl) {
+        firstFrameTask.status = resetStaleMediaStatus(shot.firstFrameStatus);
+    }
 
     const videoTask = mediaTaskFromUrl(shot.videoUrl);
-    if (shot.videoStatus && !shot.videoUrl) videoTask.status = shot.videoStatus;
+    if (shot.videoStatus && !shot.videoUrl) {
+        videoTask.status = resetStaleMediaStatus(shot.videoStatus);
+    }
 
     return {
         index: shot.index,
@@ -83,7 +101,7 @@ export function hydrateShot(shot) {
         imagePrompt: shot.imagePrompt || '',
         videoPrompt: shot.videoPrompt || '',
         blocks: shot.blocks || null,
-        scriptStatus: shot.scriptStatus || 'done',
+        scriptStatus: resetStaleScriptStatus(shot.scriptStatus || 'done'),
         scriptError: shot.scriptError || '',
         firstFrameImageUrl: shot.firstFrameImageUrl || null,
         videoUrl: shot.videoUrl || null,
@@ -114,7 +132,9 @@ function migrateLegacySceneToShots(scene) {
 export function hydrateScene(scene) {
     const env = taskUrlFromScene(scene.environmentImageUrl, null, scene.environmentImageStatus);
     const environmentImageTask = mediaTaskFromUrl(env.url);
-    if (scene.environmentImageStatus && !env.url) environmentImageTask.status = scene.environmentImageStatus;
+    if (scene.environmentImageStatus && !env.url) {
+        environmentImageTask.status = resetStaleMediaStatus(scene.environmentImageStatus);
+    }
 
     const shots = migrateLegacySceneToShots(scene).map(hydrateShot);
 
@@ -128,7 +148,10 @@ export function hydrateScene(scene) {
         shotCount: scene.shotCount || null,
         environmentImageUrl: env.url,
         shots,
-        scriptStatus: scene.scriptStatus || (shots.length ? 'done' : 'pending'),
+        scriptStatus: resetStaleScriptStatus(
+            scene.scriptStatus || (shots.length ? 'done' : 'pending'),
+            { shots },
+        ),
         scriptError: scene.scriptError || '',
         environmentImageTask,
     };
@@ -148,7 +171,7 @@ export function serializeShot(shot) {
         imagePrompt: shot.imagePrompt,
         videoPrompt: shot.videoPrompt,
         blocks: shot.blocks,
-        scriptStatus: shot.scriptStatus,
+        scriptStatus: resetStaleScriptStatus(shot.scriptStatus || 'done'),
         scriptError: shot.scriptError || '',
         firstFrameImageUrl: firstFrame.url,
         videoUrl: video.url,
@@ -174,7 +197,7 @@ export function serializeScene(scene) {
         environmentImageUrl: env.url,
         environmentImageStatus: env.status,
         shots: (scene.shots || []).map(serializeShot),
-        scriptStatus: scene.scriptStatus,
+        scriptStatus: resetStaleScriptStatus(scene.scriptStatus, { shots: scene.shots || [] }),
         scriptError: scene.scriptError || '',
     };
 }
@@ -204,7 +227,9 @@ export function serializeCharacterRefStyleRefUrl(url = '') {
 export function hydrateGeneratedCharacter(char = {}) {
     const imageUrl = char.imageUrl || null;
     const imageTask = mediaTaskFromUrl(imageUrl);
-    if (char.imageStatus && !imageUrl) imageTask.status = char.imageStatus;
+    if (char.imageStatus && !imageUrl) {
+        imageTask.status = resetStaleMediaStatus(char.imageStatus);
+    }
     return {
         name: char.name || char.characterName || '',
         prompt: char.prompt || char.imagePrompt || '',
